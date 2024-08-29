@@ -1,3 +1,7 @@
-# nfhs5Viz
+# MentalHealthViz
  
-This repository is a WIP project aiming to visualize the  National Family Health Survey 2019-21 (NFHS-5) which is designed to assist policymakers in setting benchmarks and examining progress over time in India's health sector
+This repository is a WIP project aiming to create a visualization tool allowing users to upload data to visualize spatial data for mental health indicators
+
+**Credits** 
+
+1. [World Map Shapefile](https://github.com/shijithpk/world_map_with_official_JK_border)
