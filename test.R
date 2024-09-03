@@ -6,10 +6,9 @@ library(pyramid)
 library(plotly)
 library(RColorBrewer)
 
-glp <- read.csv("F:/PE & RE Electives Semester-3/nfhs5Viz/Main_GLP.csv")
+glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv")
 
-glp_total <- glp %>% 
-group_by(Country) %>%
+glp_total <- glp %>% filter(Country=="India") %>%
   summarize(count = n())
  
 glp <- glp %>%
@@ -28,7 +27,39 @@ pyramid_df_female <- pyramid_df %>% filter(Gender == "Female")
 pyramid_df_male <- pyramid_df %>% filter(Gender == "Male")
 
 # Create the plot
- 
+filtered_data_mental_health<-
+  glp %>% rename(anxiety = 'C1_6', depression = 'C1_4', loneliness = 'C1_1')%>%  
+    filter(Country == "India") %>%  
+    filter(Gender %in% c("Female", "Male")) %>%   
+    group_by(Gender, Age_Group) %>%
+    summarise(across(anxiety:loneliness, ~ sum(. == "Yes"), .names = "count_{col}")) |> 
+    pivot_wider(names_from = Gender, values_from = c(count_anxiety,count_depression, count_loneliness))  %>%
+    mutate(count_anxiety_Male  = -count_anxiety_Male,count_depression_Male=-count_depression_Male,count_loneliness_Male=-count_loneliness_Male)  # Make male counts negative
+
+plot_ly() %>%
+  add_trace(
+    x = (filtered_data_mental_health$count_anxiety_Male/glp_total$count)*100, y = filtered_data_mental_health$Age_Group, 
+    type = 'bar', name = 'Male',
+    marker = list(color = '#303f70'),
+    orientation = 'h'
+  ) %>%
+  add_trace(
+    x = (filtered_data_mental_health$count_anxiety_Female/glp_total$count)*100, y = filtered_data_mental_health$Age_Group, 
+    type = 'bar', name = 'Female',
+    marker = list(color = '#bd5cb0'),
+    orientation = 'h'
+  ) %>%
+  layout(
+    title = paste("Population Pyramid-Anxiety for"),
+    yaxis = list(title = "Age Group"),
+    xaxis = list(title= 'Count of participants', tickmode = 'array', tickvals = c(-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100),
+                 ticktext = c('100', '80', '60','40','20', '0', '20', '40', '60','80','100')),
+    barmode = 'overlay',
+    bargap = 0.1,
+    autosize = F,
+    margin = list(l = 100, r = 20, t = 70, b = 70)
+  ) %>%
+  config(displayModeBar = FALSE)
  
 
  
@@ -96,6 +127,24 @@ filtered_data <-
     group_by(Gender, Age_Group) %>%
     summarise(across(anxiety:loneliness, ~ sum(. == "Yes"), .names = "count_{col}")) |> 
   pivot_wider(names_from = Gender, values_from = c(count_anxiety,count_depression, count_loneliness))  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
  

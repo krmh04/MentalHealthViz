@@ -11,7 +11,7 @@ library(plotly)
 library(RJSONIO)
 library(leaflet.minicharts)
 #Visualization code
-glp <- read.csv("F:/PE & RE Electives Semester-3/nfhs5Viz/Main_GLP.csv",encoding="UTF-8")
+glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv",encoding="UTF-8")
 shinyApp(
   ui = dashboardPage(
     title = "MentalHealthViz",
@@ -60,7 +60,7 @@ shinyApp(
             lead = "MentalHealthViz is a visual-analytics tool to explore large-scale population survey data,with a wide range of customisability allowing the user to upload their file of choice and view different kind of visualizations",
             
             btnName = "Github Repo",
-            href ="https://github.com/krmh04/nfhs5Viz",
+            href ="https://github.com/krmh04/MentalHealthViz",
             class = "custom-jumbotron"
           )
         ),
@@ -106,13 +106,17 @@ shinyApp(
         tabItem(
           tabName = "pyramid",
           # Dropdown to select the type of population pyramid
-          selectInput("pyramid_type", "Select Population Pyramid", 
-                      choices = c("Population Pyramid for Respondents", 
-                                  "Population Pyramid for Respondents who experienced a Mental Health Condition")),
-          
-          # Country dropdown menu
-          uiOutput("country_ui"),
-          
+          fluidRow(
+            column(width = 6,
+                   # Dropdown to select the type of population pyramid
+                   selectInput("pyramid_type", "Select Population Pyramid", 
+                               choices = c("Pop Pyramid for Respondents", 
+                                           "Pop Pyramid who experienced a MH Condition"))
+            ),
+            column(width = 4,
+                   # Country dropdown menu
+                   uiOutput("country_ui")
+            )),
           # Plot output based on the selection
           uiOutput("dynamic_plots")
         )
@@ -121,7 +125,7 @@ shinyApp(
   ),
   server = function(input, output, session) {
     # Load the data
-    countries <- read_sf('F:/PE & RE Electives Semester-3/nfhs5Viz/Shapefiles/copy_4.shp',options = "ENCODING=WINDOWS-1252")
+    countries <- read_sf('F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/copy_4.shp',options = "ENCODING=WINDOWS-1252")
     countries <- countries %>% rename(Country = NAME_LONG)
     
     glp_geocoded <- reactive({
@@ -157,7 +161,7 @@ shinyApp(
       new_df() %>% group_by(Country) %>% pivot_wider(names_from = Gender, values_from = count, values_fill = 0)
     })
     
-    colors <- c("#dd22dd", "#ADD8E6","#c8F213","#808080")
+    colors <- c("#dd22dd", "#276f87","#c8F213","#808080")
     output$map <- renderLeaflet({
       gender_data <- gender_df()
       leaflet(gender_data) %>% addProviderTiles(providers$CartoDB.PositronNoLabels) %>% setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
@@ -176,7 +180,7 @@ shinyApp(
                     fillColor = ~paletteBinned(countries$count)) %>% addLegend(pal = paletteBinned, values = countries$count,
                                                                              title = '<small>No of particiipants</small>',
                                                                              position = 'bottomleft') %>% 
-        addMinicharts(gender_data$longitude, gender_data$latitude, type = "pie", chartdata = gender_data[,c("Female", "Male", "Other","Don't know/ Prefer not to say")], colorPalette = colors, width = 25, transitionTime = 0)
+        addMinicharts(gender_data$longitude, gender_data$latitude, type = "pie", chartdata = gender_data[,c("Female", "Male", "Other","Don't know/ Prefer not to say")], colorPalette = colors, width = (gender_data$Male +gender_data$Female)/100, transitionTime = 0)
     })
     
     mh_yn <- glp %>% group_by(Country, I13) %>% summarize(count = n()) %>% pivot_wider(names_from = I13, values_from = count)
@@ -189,7 +193,7 @@ shinyApp(
     
     glp_summary <- glp_indicators %>% group_by(Country) %>% summarise(across(anxiety:all_three, ~ sum(. == "Yes"), .names = "count_{col}"))
     
-   # countries <- jsonlite::fromJSON(txt ="F:/PE & RE Electives Semester-3/nfhs5Viz/Shapefiles/World_Countries_Generalized.json")
+   # countries <- jsonlite::fromJSON(txt ="F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/World_Countries_Generalized.json")
     
     output$plot_yn <- renderPlotly({
       param_mhyn <- input$parameter_mhyn
@@ -236,7 +240,13 @@ shinyApp(
         pivot_wider(names_from = Gender, values_from = count) %>%
         mutate(Male = -Male)  # Make male counts negative
     })
-    
+    output$country_ui <- renderUI({
+      if (input$pyramid_type != "") {
+        selectInput("pyramid-dropdown", "Country", choices = sort(unique(glp$Country)), selected = "Argentina")
+        
+      }
+      
+    })
     
     filtered_data_mental_health<-reactive({
       glp %>% rename(anxiety = 'C1_6', depression = 'C1_4', loneliness = 'C1_1')%>%  
@@ -247,23 +257,53 @@ shinyApp(
         pivot_wider(names_from = Gender, values_from = c(count_anxiety,count_depression, count_loneliness))  %>%
         mutate(count_anxiety_Male  = -count_anxiety_Male,count_depression_Male=-count_depression_Male,count_loneliness_Male=-count_loneliness_Male)  # Make male counts negative
     })
-    output$country_ui <- renderUI({
-      if (input$pyramid_type != "") {
-        selectInput("pyramid-dropdown", "Country", choices = sort(unique(glp$Country)), selected = "Argentina")
-      }
-    })
-    
+ 
     output$dynamic_plots <- renderUI({
-      if (input$pyramid_type == "Population Pyramid for Respondents") {
+      if (input$pyramid_type == "Pop Pyramid for Respondents") {
         # Return only one plot for the first option
-        plotlyOutput("pyramid_chart")
+        div(plotlyOutput("pyramid_chart"),align="center")
       } else {
         tagList(
-          plotlyOutput("anxiety_plot"),
-          br(), br(),  # Add some spacing here
-          plotlyOutput("depression_plot"),
-          br(), br(),  # Add some spacing here
-          plotlyOutput("loneliness_plot")
+          fluidRow(
+            column(
+              width = 6,  # Adjust width as necessary
+              selectInput("condition-dropdown", "Condition", 
+                          choices = c("Anxiety", "Depression", "Loneliness"), 
+                          selected = "Anxiety")
+            ),
+            column(
+              width = 6,  # Adjust width as necessary
+              selectInput("value-type-dropdown", "Value Type", 
+                          choices = c("Absolute Values", "Percentage"), 
+                          selected = "Absolute Values")
+            )
+          ),
+          
+          # Conditional rendering of plots based on the selected condition and value type
+          conditionalPanel(
+            condition = "input['condition-dropdown'] == 'Anxiety' && input['value-type-dropdown'] == 'Absolute Values'",
+            div(plotlyOutput("anxiety_plot"),align="center")
+          ),
+          conditionalPanel(
+            condition = "input['condition-dropdown'] == 'Anxiety' && input['value-type-dropdown'] == 'Percentage'",
+            div(plotlyOutput("anxiety_per_plot"),align="center")
+          ),
+          conditionalPanel(
+            condition = "input['condition-dropdown'] == 'Depression' && input['value-type-dropdown'] == 'Absolute Values'",
+            div(plotlyOutput("depression_plot"),align="center")
+          ),
+          conditionalPanel(
+            condition = "input['condition-dropdown'] == 'Depression' && input['value-type-dropdown'] == 'Percentage'",
+            div(plotlyOutput("depression_per_plot"),align="center")
+          ),
+          conditionalPanel(
+            condition = "input['condition-dropdown'] == 'Loneliness' && input['value-type-dropdown'] == 'Absolute Values'",
+            div(plotlyOutput("loneliness_plot"),align="center")
+          ),
+          conditionalPanel(
+            condition = "input['condition-dropdown'] == 'Loneliness' && input['value-type-dropdown'] == 'Percentage'",
+            div(plotlyOutput("loneliness_per_plot"),align="center")
+          )
         )
       }
     })
@@ -278,13 +318,13 @@ shinyApp(
         add_trace(
           x = ~Male, y = ~Age_Group, 
           type = 'bar', name = 'Male',
-          marker = list(color = 'lightblue'),
+          marker = list(color = '#303f70'),
           orientation = 'h'
         ) %>%
         add_trace(
           x = ~Female, y = ~Age_Group, 
           type = 'bar', name = 'Female',
-          marker = list(color = 'pink'),
+          marker = list(color = '#bd5cb0'),
           orientation = 'h'
         ) %>%
         layout(
@@ -311,13 +351,13 @@ shinyApp(
         add_trace(
           x = ~count_anxiety_Male, y = ~Age_Group, 
           type = 'bar', name = 'Male',
-          marker = list(color = 'lightblue'),
+          marker = list(color = '#303f70'),
           orientation = 'h'
         ) %>%
         add_trace(
           x = ~count_anxiety_Female, y = ~Age_Group, 
           type = 'bar', name = 'Female',
-          marker = list(color = 'pink'),
+          marker = list(color = '#bd5cb0'),
           orientation = 'h'
         ) %>%
         layout(
@@ -346,13 +386,13 @@ shinyApp(
         add_trace(
           x = ~count_depression_Male, y = ~Age_Group, 
           type = 'bar', name = 'Male',
-          marker = list(color = 'lightblue'),
+          marker = list(color = '#303f70'),
           orientation = 'h'
         ) %>%
         add_trace(
           x = ~count_depression_Female, y = ~Age_Group, 
           type = 'bar', name = 'Female',
-          marker = list(color = 'pink'),
+          marker = list(color = '#bd5cb0'),
           orientation = 'h'
         ) %>%
         layout(
@@ -382,13 +422,13 @@ shinyApp(
         add_trace(
           x = ~count_loneliness_Male, y = ~Age_Group, 
           type = 'bar', name = 'Male',
-          marker = list(color = 'lightblue'),
+          marker = list(color = '#303f70'),
           orientation = 'h'
         ) %>%
         add_trace(
           x = ~count_loneliness_Female, y = ~Age_Group, 
           type = 'bar', name = 'Female',
-          marker = list(color = 'pink'),
+          marker = list(color = '#bd5cb0'),
           orientation = 'h'
         ) %>%
         layout(
@@ -403,7 +443,151 @@ shinyApp(
         ) %>%
         config(displayModeBar = FALSE)
     })
+    #FOR PERCENTAGES
     
+    
+    #for anxiety
+
+    glp_total <- reactive({
+      glp %>% 
+        filter(Country == input$`pyramid-dropdown`) %>%
+        summarize(count = n())
+    })
+    
+    
+    output$anxiety_per_plot <- renderPlotly({
+      
+      pyramid_df_anxiety <- filtered_data_mental_health()
+      total_count <- glp_total()
+      selected_country <- input$`pyramid-dropdown`
+      
+      plot_ly() %>%
+        add_trace(
+          x = (pyramid_df_anxiety$count_anxiety_Male/total_count$count)*100, y = pyramid_df_anxiety$Age_Group, 
+          type = 'bar', name = 'Male',
+          marker = list(color = '#303f70'),
+          orientation = 'h'
+        ) %>%
+        add_trace(
+          x = (pyramid_df_anxiety$count_anxiety_Female/total_count$count)*100, y = pyramid_df_anxiety$Age_Group, 
+          type = 'bar', name = 'Female',
+          marker = list(color = '#bd5cb0'),
+          orientation = 'h'
+        ) %>%
+        layout(
+          title = paste("Population Pyramid-Anxiety for", selected_country),
+          yaxis = list(title = "Age Group"),
+          xaxis = list(title= 'Count of participants', tickmode = 'array', tickvals = c(-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100),
+                       ticktext = c('100', '80', '60','40','20', '0', '20', '40', '60','80','100')),
+          barmode = 'overlay',
+          bargap = 0.1,
+          autosize = F,
+          margin = list(l = 100, r = 20, t = 70, b = 70)
+        ) %>%
+        config(displayModeBar = FALSE)
+    })  
+    
+    
+    #for loneliness
+    
+    output$loneliness_per_plot <- renderPlotly({
+      
+      pyramid_df_loneliness <- filtered_data_mental_health()
+      total_count <- glp_total()
+      
+      selected_country <- input$`pyramid-dropdown`
+      
+      plot_ly() %>%
+        add_trace(
+          x = (pyramid_df_loneliness$count_loneliness_Male/total_count$count)*100, y = pyramid_df_loneliness$Age_Group, 
+          type = 'bar', name = 'Male',
+          marker = list(color = '#303f70'),
+          orientation = 'h'
+        ) %>%
+        add_trace(
+          x = (pyramid_df_loneliness$count_loneliness_Female/total_count$count)*100, y = pyramid_df_loneliness$Age_Group, 
+          type = 'bar', name = 'Female',
+          marker = list(color = '#bd5cb0'),
+          orientation = 'h'
+        ) %>%
+        layout(
+          title = paste("Population Pyramid-loneliness for", selected_country),
+          yaxis = list(title = "Age Group"),
+          xaxis = list(title= 'Count of participants', tickmode = 'array', tickvals = c(-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100),
+                       ticktext = c('100', '80', '60','40','20', '0', '20', '40', '60','80','100')),
+          barmode = 'overlay',
+          bargap = 0.1,
+          autosize = F,
+          margin = list(l = 100, r = 20, t = 70, b = 70)
+        ) %>%
+        config(displayModeBar = FALSE)
+    }) 
+    
+    
+    
+    #for depression
+    output$depression_per_plot <- renderPlotly({
+      
+      pyramid_df_depression <- filtered_data_mental_health()
+            total_count <- glp_total()
+
+      selected_country <- input$`pyramid-dropdown`
+      
+      plot_ly() %>%
+        add_trace(
+          x = (pyramid_df_depression$count_depression_Male/total_count$count)*100, y = pyramid_df_depression$Age_Group, 
+          type = 'bar', name = 'Male',
+          marker = list(color = '#303f70'),
+          orientation = 'h'
+        ) %>%
+        add_trace(
+          x = (pyramid_df_depression$count_depression_Female/total_count$count)*100, y = pyramid_df_depression$Age_Group, 
+          type = 'bar', name = 'Female',
+          marker = list(color = '#bd5cb0'),
+          orientation = 'h'
+        ) %>%
+        layout(
+          title = paste("Population Pyramid-depression for", selected_country),
+          yaxis = list(title = "Age Group"),
+          xaxis = list(title= 'Count of participants', tickmode = 'array', tickvals = c(-100, -80, -60,-40,-20, 0, 20, 40, 60,80,100),
+                       ticktext = c('100', '80', '60','40','20', '0', '20', '40', '60','80','100')),
+          barmode = 'overlay',
+          bargap = 0.1,
+          autosize = F,
+          margin = list(l = 100, r = 20, t = 70, b = 70)
+        ) %>%
+        config(displayModeBar = FALSE)
+    }) 
     
   })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
