@@ -7,6 +7,8 @@ library(plotly)
 library(RColorBrewer)
 
 glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv")
+geocoded_file_path <- "F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_glp.csv"
+glp_geocoded_data <- read.csv(geocoded_file_path)
 
 glp_total <- glp %>% filter(Country=="India") %>%
   summarize(count = n())
@@ -131,9 +133,67 @@ filtered_data <-
 
 
 
+new_mhdata <- read_csv("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_ProfOgunbode.csv")
+ 
+
+   # new_mhdata <- new_mhdata %>% geocode(Country_Code, method = 'osm', lat = latitude, long = longitude)
+
+
+new_mhdata <- new_mhdata |>   
+  group_by(Country_Code, Anxious,latitude,longitude) |> 
+  summarize(count = n())
+
+
+new_mhdata<-  new_mhdata |>  pivot_wider(names_from = Anxious, values_from = count, values_fill = 0)
 
 
 
+ 
+
+ names(new_mhdata) <- gsub("[\r\n]", "", names(new_mhdata))
+
+
+
+
+
+  
+
+colors <- c("#3093e5", "#fcba50", "#a0d9e8","#dfdfdf","#000000")
+leaflet(new_mhdata) %>% 
+  addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
+  setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
+  
+  addMinicharts(new_mhdata$longitude, new_mhdata$latitude,chartdata = new_mhdata[, 4:8], colorPalette = colors, width = 60,height=120, transitionTime = 0)
+
+
+
+
+very_new_data<-read_xlsx("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_new_mhdata.xlsx")
+
+
+
+output$bar_map <- renderLeaflet({
+  leaflet(new_mhdata) %>% 
+    addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
+    setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
+    
+    addMinicharts(new_mhdata$longitude, new_mhdata$latitude,chartdata = new_mhdata[, 4:8], colorPalette = colors, width = 60,height=120, transitionTime = 0)
+  
+  
+  
+ })
+ 
+
+
+
+
+
+
+
+glp_summary <- glp_indicators %>% group_by(Country) %>% summarise(across(anxiety:all_three, ~ sum(. == "Yes"), .names = "count_{col}"))
+
+
+print(filtered_countries)
 
 
 

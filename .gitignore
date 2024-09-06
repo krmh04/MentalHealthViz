@@ -3,3 +3,7 @@ Global Listening Project - Final Data.csv
 Main_GLP.csv
 glp_script.sps
 .Rhistory
+geocoded_glp.csv
+geocoded_ProfOgunbode.csv
+.Rdata
+ProfOgunbode.csv
