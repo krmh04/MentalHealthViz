@@ -5,7 +5,9 @@ library(tidygeocoder)
 library(pyramid)
 library(plotly)
 library(RColorBrewer)
-
+library(likert)
+library(HH)
+library(patchwork)
 glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv")
 geocoded_file_path <- "F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_glp.csv"
 glp_geocoded_data <- read.csv(geocoded_file_path)
@@ -143,68 +145,286 @@ new_mhdata <- new_mhdata |>
   group_by(Country_Code, Anxious,latitude,longitude) |> 
   summarize(count = n())
 
+names(new_mhdata) <- gsub("[\r\n]", "", names(new_mhdata))
 
 new_mhdata<-  new_mhdata |>  pivot_wider(names_from = Anxious, values_from = count, values_fill = 0)
 
 
+new_mhdata_for_likert <- new_mhdata |>   
+  group_by(Country_Code, Anxious) |> 
+  summarize(count = n())
+
+new_mhdata_for_likert <- new_mhdata_for_likert %>%
+  filter(!is.na(Anxious))
+
+new_mhdata_for_likert_wide<-  new_mhdata_for_likert |>  pivot_wider(names_from = Anxious, values_from = count, values_fill = 0)
+
+new_mhdata_for_likert_wide <- new_mhdata_for_likert_wide %>%
+  mutate(Country_Code = as.factor(Country_Code))
+
+
+
+  
+HH::likert(Country_Code ~ ., new_mhdata_for_likert_wide, main="Divergent bar chart for people with Anxiety")
+
+new_mhdata <- read_csv("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_ProfOgunbode.csv")
+names(new_mhdata) <- gsub("[\r\n]", "", names(new_mhdata))
 
  
 
- names(new_mhdata) <- gsub("[\r\n]", "", names(new_mhdata))
+ 
+
+dat_longer <-new_mhdata |>   
+  group_by(Country_Code, Anxious) |> 
+  summarize(count = n())
+
+dat_longer<-  dat_longer |>  pivot_wider(names_from = Anxious, values_from = count, values_fill = 0)
 
 
+dat_longer <- dat_longer %>% rename(None = 'NA')
+dat_for_plot <- dat_longer %>%
+  pivot_longer(
+    cols = 2:7,  
+    names_to = "Anxious",      
+    values_to = "count"        
+  )
+ 
 
+dat_filtered <- dat_for_plot %>%
+  filter(Anxious != "None")
 
+ 
+dat_filtered$Anxious <- trimws(as.character(dat_filtered$Anxious))
 
   
-
-colors <- c("#3093e5", "#fcba50", "#a0d9e8","#dfdfdf","#000000")
-leaflet(new_mhdata) %>% 
-  addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
-  setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
-  
-  addMinicharts(new_mhdata$longitude, new_mhdata$latitude,chartdata = new_mhdata[, 4:8], colorPalette = colors, width = 60,height=120, transitionTime = 0)
+colnames(dat_longer) <- gsub("[\r\n]", "", colnames(dat_longer))
 
 
+# Define the levels in the order you want them
+levels_order <- c("Not at all", "Somewhat", "Moderately", "Very much", "Extremely")
 
 
-very_new_data<-read_xlsx("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_new_mhdata.xlsx")
+dat_filtered <- dat_filtered %>%
+  arrange(Country_Code,Anxious)
+
+
+# Convert to ordered factor
+dat_filtered$Anxious <- factor(dat_filtered$Anxious, 
+                             levels = levels_order,
+                             ordered = TRUE)
+
+computed_values <- dat_filtered |> 
+  mutate(
+    middle_shift = sum(count[1:2]),
+    lagged_count = lag(count, default = 0),
+    left = cumsum(lagged_count) - middle_shift,
+    right = cumsum(count) - middle_shift,
+    middle_point = (left + right) / 2,
+    width = right - left,
+   )
+
+
+bar_width <- 0.75
+computed_values |> 
+  ggplot() +
+  geom_tile(
+    aes(
+      x = middle_point, 
+      y = Country_Code,
+      width = width,
+      fill = Anxious
+    ),
+    height = bar_width
+  )
+breaks = seq(-1200, 1200, by = 200)
+labels = as.character(abs(breaks))
+
+
+factor_dat <- computed_values |> 
+  mutate(
+    label = factor(
+      Country_Code,
+      levels = dat_longer$Country_Code
+    ) |> fct_rev()
+  ) 
+
+initial_diverging_bar_plot <- factor_dat |> 
+  ggplot() +
+  geom_tile(
+    aes(
+      x = middle_point, 
+      y = Country_Code,
+      width = width,
+      fill = Anxious
+    ),
+    height = bar_width
+  )+scale_x_continuous(
+    breaks = breaks,  # Define your custom tick positions
+    labels =labels)
+initial_diverging_bar_plot +geom_vline(
+  xintercept = 0,
+  color = 'black',
+  linewidth = 0.25
+)+theme(
+  legend.position = "bottom",
+    panel.grid = element_blank(),
+  panel.grid.major = element_blank(),  
+  panel.grid.minor = element_blank()
+)+labs(x="No of responses",y="Country")
 
 
 
-output$bar_map <- renderLeaflet({
-  leaflet(new_mhdata) %>% 
-    addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
-    setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
+
+grey_color = '#bdbfc1'
+
+dat_for_none <- dat_for_plot %>%
+  filter(Anxious == "None")
+
+
+neither_chart <- dat_for_none |>
+  ggplot() +
+  geom_col(
+    aes(
+      y =Country_Code,
+      x =count ,
+    ),
+    fill = grey_color,
+    width = bar_width
+  )+  geom_text(
+    aes(
+      y = Country_Code,
+      x = count,
+      label = count
+    ),
+    size = 2.5,
+    color = 'black',
+    hjust = -0.1
+  )+labs(title="None")+scale_x_continuous(
+    limits = c(0, 8))+theme(
+      legend.position = 'none',
+      strip.text = element_blank(),
+      axis.title = element_blank(),
+      panel.grid = element_blank(),
+      axis.ticks = element_blank(),
+      axis.text = element_blank()
+    )
+
     
-    addMinicharts(new_mhdata$longitude, new_mhdata$latitude,chartdata = new_mhdata[, 4:8], colorPalette = colors, width = 60,height=120, transitionTime = 0)
-  
-  
-  
- })
+ combined_plot<-initial_diverging_bar_plot +
+   neither_chart +
+   plot_layout(
+     ncol = 3,
+     widths = c(3,1)
+   )
+ combined_plot
+ 
+ 
+ 
  
 
+ dat_longer <-new_mhdata |>   
+   group_by(Country_Code, Anxious) |> 
+   summarize(count = n())
+ 
+ dat_longer<-  dat_longer |>  pivot_wider(names_from = Anxious, values_from = count, values_fill = 0)
+  
+ 
+ dat_longer <- dat_longer %>% rename(None = 'NA')
+ dat_for_plot <- dat_longer %>%
+   pivot_longer(
+     cols = 2:7,  
+     names_to = "Anxious",      
+     values_to = "count"        
+   )
+ 
+ colnames(dat_longer) <- gsub("[\r\n]", "", colnames(dat_longer))
+ 
+ dat_filtered <- dat_for_plot %>%
+   filter(Anxious != "None")
+ 
+ 
+ dat_filtered$Anxious <- trimws(as.character(dat_filtered$Anxious))
+ 
+ 
+ 
+ 
+ 
+ 
+ levels_order <- c("Not at all", "Somewhat", "Moderately", "Very much", "Extremely")
+ dat_filtered$Anxious <- factor(dat_filtered$Anxious, levels = levels_order, ordered = TRUE)
+ 
+ # Assuming dat_filtered is your original dataset
+ dat_filtered <- dat_filtered %>%
+   arrange(Country_Code, Anxious) %>%
+   group_by(Country_Code) %>%
+   mutate(
+     total_responses = sum(count),
+     percentage = count / total_responses * 100
+   ) %>%
+   ungroup()
+ 
+ # Convert to ordered factor
+ 
+ computed_values <- dat_filtered %>%
+   group_by(Country_Code) %>%
+   mutate(
+     middle_shift = sum(percentage[1:2]),
+     lagged_percentage = lag(percentage, default = 0),
+     left = cumsum(lagged_percentage) - middle_shift,
+     right = cumsum(percentage) - middle_shift,
+     middle_point = (left + right) / 2,
+     width = right - left
+   ) %>%
+   ungroup()
+ 
+ bar_width <- 0.75
+ 
+ # Create the plot
+ diverging_bar_plot_percentages <- computed_values %>%
+   mutate(
+     label = factor(Country_Code, levels = unique(Country_Code)) %>% fct_rev()
+   ) %>%
+   ggplot() +
+   geom_tile(
+     aes(
+       x = middle_point,
+       y = Country_Code,
+       width = width,
+       fill = Anxious
+     ),
+     height = bar_width
+   ) +
+   scale_x_continuous(
+     breaks = seq(-100, 100, by = 20),
+     labels = function(x) paste0(abs(x), "%")
+   ) +
+   geom_vline(
+     xintercept = 0,
+     color = 'black',
+     linewidth = 0.25
+   ) +
+   theme(
+     legend.position = "bottom",
+     panel.grid = element_blank(),
+     panel.grid.major = element_blank(),
+     panel.grid.minor = element_blank()
+   ) +
+   labs(x = "Percentage of responses", y = "Country")
+ 
+ # Display the plot
+ print(diverging_bar_plot_percentages)
+ 
+ 
+ 
 
-
-
-
-
-
-glp_summary <- glp_indicators %>% group_by(Country) %>% summarise(across(anxiety:all_three, ~ sum(. == "Yes"), .names = "count_{col}"))
-
-
-print(filtered_countries)
-
-
-
-
-
-
-
-
-
-
-
-
-
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
  

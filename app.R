@@ -6,9 +6,12 @@ library(readxl)
 library(sf)
 library(tidyverse)
 library(tidygeocoder)
+library(ggplot2)
 library(plotly)
 library(RJSONIO)
 library(leaflet.minicharts)
+library(ggiraph)
+library(DT)
 #Visualization code
 glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv",encoding="UTF-8")
 new_mhdata <- read_csv("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_ProfOgunbode.csv")
@@ -38,12 +41,15 @@ shinyApp(
         id = "sidebarMenuid",
         menuItem("Home", tabName = "home", icon = icon("home")),
         menuItem("About", tabName = "about", icon = icon("clipboard")),
+        menuItem("Upload", tabName = "upload", icon = icon("upload")),
+        
         menuItem("Population Samples", tabName = "samples", icon = icon("person")),
         menuItem("Mental Health Indicators", tabName = "mentalhealth", icon = icon("notes-medical")),
         menuItem("Ordinal data", tabName = "ordinal", icon = icon("chart-column")),
+        menuItem("Divergent bar chart", tabName = "stacked", icon = icon("boxes-stacked")),
+        
         menuItem("Population Pyramid", tabName = "pyramid", icon = icon("cubes"))
-        # menuItem("Stacked Bar Chart", tabName = "barchart", icon = icon("chart-bar")),
-        # menuItem("Others", tabName = "others", icon = icon("arrow-up-right-dots"))
+ 
       )
     ),
     body = dashboardBody(  
@@ -84,6 +90,29 @@ shinyApp(
           The expected outcome, a visual analytics tool, is designed to explore different sections of the 
           data available about different mental health indicators.We have visualizations with maps, simple and stacked bar charts, scatter plots, population pyramids, and others."
         ),
+        tabItem(
+          
+          tabName = "upload",
+          fluidRow(
+            column(2,
+                   fileInput(inputId = "filedata",
+                             label = "Upload data. Choose csv file",
+                             accept = c(".csv")),
+            ),
+            column(2,
+                   fileInput(inputId = "filemap",
+                             label = "Upload map. Choose shapefile",
+                             multiple = TRUE,
+                             accept = c('.shp','.dbf','.sbn','.sbx','.shx','.prj')),
+            )
+          ),
+          fluidRow(
+            column(6,
+            DTOutput("table")  # Table output placeholder
+          ))
+          
+          ),
+         
         tabItem(
           tabName = "samples",
           fluidRow(
@@ -134,7 +163,25 @@ shinyApp(
                    )
             )
         )),
-        
+        tabItem(
+          tabName = "stacked",
+          # Dropdown to select the type of population pyramid
+          h4("Respondents' Feelings with regards to Climate Anxiety"),
+          
+          fluidRow(
+            column(width = 6,
+                   # Dropdown to select the type of population pyramid
+                   selectInput("choice_type_stacked", "Select the parameter", 
+                               choices = names(new_mhdata)[4:10]) 
+            ),
+            column(width=6,
+                   div(style = "height:416px;width:743px;margin-left: -282px", 
+                   girafeOutput("diverging_bar_plot_percentages")
+                   )
+                   
+           )
+            )
+          ), 
         
         
         tabItem(
@@ -166,6 +213,15 @@ shinyApp(
     #   glp %>% geocode(Country, method = 'osm', lat = latitude, long = longitude)
     #   
     # })
+    data <- reactive({
+      req(input$filedata)  # Ensure a file is uploaded
+      read.csv(input$filedata$datapath)
+    })
+    
+    # Render the data table showing the first 10 rows
+    output$table <- renderDT({
+      head(data(), 10)
+    })
     
     glp_total <- glp %>% 
       group_by(Country) %>%
@@ -183,8 +239,9 @@ shinyApp(
                               "US" = "United States"))
     countries <- merge(countries, glp_total, by = 'Country', all.x = F)
      
-    costBins <- c(500, 600,800, 1000,1100, 1200, Inf)
-    paletteBinned <- colorBin('OrRd', domain = countries$count, bins = costBins)
+    costBins <- c(500, 700,900,1100,Inf)
+    custom_colors <- c("#fde8cd", "#fddcc0", "#fcc5aa", "#d57b7b")
+    paletteBinned <- colorBin(palette = custom_colors, domain = countries$count, bins = costBins)
     
     
     new_df <- reactive({
@@ -212,48 +269,15 @@ shinyApp(
                     
                     # specify that the each state should be colored per paletteNum()
                     fillColor = ~paletteBinned(countries$count)) %>% addLegend(pal = paletteBinned, values = countries$count,
-                                                                             title = '<small>No of particiipants</small>',
+                                                                             title = '<small>No of participants</small>',
+                                                                             labels = c("500-700", "700-900", "900-1100", ">1100"),  
+                                                                             labFormat = function(type, cuts, p) {
+                                                                                labels <- c("500-700", "700-900", "900-1100", ">1100")
+                                                                               return(labels)
+                                                                             },
                                                                              position = 'bottomleft') %>% 
         addMinicharts(gender_data$longitude, gender_data$latitude, type = "pie", chartdata = gender_data[,c("Female", "Male", "Other","Don't know/ Prefer not to say")], colorPalette = colors, width = (gender_data$Male +gender_data$Female)/80, transitionTime = 0)
     })
-    
-    # colors_for_mh <- c("#3093e5", "#fcba50", "#a0d9e8","#dfdfdf","#000000")
-    # 
-    # 
-    # reactive_mh_data <- reactive({
-    #   # selected_type <- input$`choice_type`
-    #   
-    #   new_mhdata |>   
-    #     group_by(Country_Code, input$`choice_type`, latitude, longitude) |> 
-    #     summarize(count = n()) 
-    #   
-    # })
-    # reactive_mh_data <-reactive({
-    #   
-    #   
-    #   reactive_mh_data |> pivot_wider(names_from = input$`choice_type`, values_from = count, values_fill = 0)
-    # })
-    # # 
-    # # new_mhdata <- new_mhdata |>   
-    # #   group_by(Country_Code, selected_type,latitude,longitude) |> 
-    # #   summarize(count = n())
-    # # 
-    # 
-    # # new_mhdata<-  new_mhdata |>  pivot_wider(names_from = selected_type, values_from = count, values_fill = 0)
-    # # 
-    # 
-    # 
-    # output$bar_map <- renderLeaflet({
-    #   reactive_mh <- reactive_mh_data()
-    #   
-    #   leaflet(reactive_mh) %>% 
-    #     addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
-    #     setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
-    #     
-    #     addMinicharts(reactive_mh$longitude, reactive_mh$latitude,chartdata = reactive_mh[, 4:8], colorPalette = colors_for_mh, width = 60,height=120, transitionTime = 0)
-    # 
-    # })
-    # 
     
     colors_for_mh <- c("#06C", "#8481DD", "#4CB140","#005F60","#F4C145")
     
@@ -271,9 +295,107 @@ shinyApp(
         addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
         setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
         
-        addMinicharts(reactive_mh$longitude, reactive_mh$latitude, chartdata = reactive_mh[, 4:8], 
-                      colorPalette = colors_for_mh, width = 60, height = 120, transitionTime = 0)
+        addMinicharts(reactive_mh$longitude, reactive_mh$latitude,type = "pie", chartdata = reactive_mh[, 4:8], 
+                      colorPalette = colors_for_mh, width = 35, height = 35, transitionTime = 0)
     })
+    processed_data <- reactive({
+      choice_type_stacked <- input$choice_type_stacked
+      
+      dat_longer <- new_mhdata |>   
+        group_by(Country_Code, !!sym(choice_type_stacked)) |> 
+        summarize(count = n())
+      
+      dat_longer <- dat_longer |>  
+        pivot_wider(names_from = !!sym(choice_type_stacked), values_from = count, values_fill = 0)
+      
+      dat_longer <- dat_longer %>% rename(None = 'NA')
+      dat_for_plot <- dat_longer %>%
+        pivot_longer(
+          cols = 2:7,  
+          names_to = choice_type_stacked,      
+          values_to = "count") 
+      
+      colnames(dat_longer) <- gsub("[\r\n]", "", colnames(dat_longer))
+      
+      dat_filtered <- dat_for_plot %>%
+        filter(!!sym(choice_type_stacked) != "None")
+      
+      dat_filtered[[choice_type_stacked]] <- trimws(as.character(dat_filtered[[choice_type_stacked]]))
+      
+      levels_order <- c("Not at all", "Somewhat", "Moderately", "Very much", "Extremely")
+      
+      dat_filtered[[choice_type_stacked]] <- factor(dat_filtered[[choice_type_stacked]], 
+                                                    levels = levels_order, ordered = TRUE)
+       dat_filtered <- dat_filtered %>%
+        arrange(Country_Code, !!sym(choice_type_stacked)) %>%
+        group_by(Country_Code) %>%
+        mutate(
+          total_responses = sum(count),
+          percentage = count / total_responses * 100
+        ) %>%
+        ungroup()
+   
+      
+      computed_values <- dat_filtered %>%
+        group_by(Country_Code) %>%
+        mutate(
+          middle_shift = sum(percentage[1:2]),
+          lagged_percentage = lag(percentage, default = 0),
+          left = cumsum(lagged_percentage) - middle_shift,
+          right = cumsum(percentage) - middle_shift,
+          middle_point = (left + right) / 2,
+          width = right - left
+        ) %>%
+        ungroup()
+      
+      return(computed_values)
+    })
+    
+    # Render the plot
+    output$diverging_bar_plot_percentages <- renderGirafe({
+      bar_width <- 0.75
+      
+      # Create the plot
+      diverging_bar_plot_percentages <- processed_data() %>%
+        mutate(
+          label = factor(Country_Code, levels = unique(Country_Code)) %>% fct_rev()
+        ) %>%
+        ggplot() +
+        geom_tile_interactive(
+          aes(
+            x = middle_point,
+            y = Country_Code,
+            width = width,
+            fill = !!sym(input$choice_type_stacked),tooltip = paste0("Country: ", Country_Code, "<br>",
+                                                                     "Percentage: ", abs(middle_point),"%")
+          ),
+          height = bar_width
+        ) +
+        scale_x_continuous(
+          breaks = seq(-100, 100, by = 20),
+          labels = function(x) paste0(abs(x), "%")
+        )  +
+        theme(
+          legend.position = "right",
+          panel.grid = element_blank(),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank()
+        ) +
+        labs(x = "Percentage of responses", y = "Country")
+      
+      # return(diverging_bar_plot_percentages)
+      return(girafe(ggobj = diverging_bar_plot_percentages))
+  })
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     
     
@@ -572,7 +694,7 @@ shinyApp(
           title = paste("Population Pyramid-Anxiety for", selected_country),
           yaxis = list(title = "Age Group"),
           xaxis = list(title= 'Percengtage(%) of participants', tickmode = 'array', tickvals = c(-10, -8, -6,-4,-2, 0, 2, 4, 6,8,10),
-                       ticktext = c('10', '8', '6','4','2', '0', '2', '4', '6','8','10')),
+                       ticktext = c('10%', '8%', '6%','4%','2%', '0', '2%', '4%', '6%','8%','10%')),
           barmode = 'overlay',
           bargap = 0.1,
           autosize = F,
@@ -608,7 +730,7 @@ shinyApp(
           title = paste("Population Pyramid-Loneliness for", selected_country),
           yaxis = list(title = "Age Group"),
           xaxis = list(title= 'Percengtage(%) of participants', tickmode = 'array', tickvals = c(-10, -8, -6,-4,-2, 0, 2, 4, 6,8,10),
-                       ticktext = c('10', '8', '6','4','2', '0', '2', '4', '6','8','10')),
+                       ticktext = c('10%', '8%', '6%','4%','2%', '0', '2%', '4%', '6%','8%','10%')),
           barmode = 'overlay',
           bargap = 0.1,
           autosize = F,
@@ -644,7 +766,7 @@ shinyApp(
           title = paste("Population Pyramid-Death for", selected_country),
           yaxis = list(title = "Age Group"),
           xaxis = list(title= 'Percengtage(%) of participants', tickmode = 'array', tickvals = c(-10, -8, -6,-4,-2, 0, 2, 4, 6,8,10),
-                       ticktext = c('10', '8', '6','4','2', '0', '2', '4', '6','8','10')),
+                       ticktext = c('10%', '8%', '6%','4%','2%', '0', '2%', '4%', '6%','8%','10%')),
           barmode = 'overlay',
           bargap = 0.1,
           autosize = F,
