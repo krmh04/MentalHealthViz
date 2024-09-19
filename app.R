@@ -8,10 +8,10 @@ library(tidyverse)
 library(tidygeocoder)
 library(ggplot2)
 library(plotly)
-library(RJSONIO)
 library(leaflet.minicharts)
 library(ggiraph)
 library(DT)
+options(shiny.maxRequestSize = 500 * 1024^2)
 #Visualization code
 glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv",encoding="UTF-8")
 new_mhdata <- read_csv("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_ProfOgunbode.csv")
@@ -90,27 +90,37 @@ shinyApp(
           The expected outcome, a visual analytics tool, is designed to explore different sections of the 
           data available about different mental health indicators.We have visualizations with maps, simple and stacked bar charts, scatter plots, population pyramids, and others."
         ),
-        tabItem(
-          
-          tabName = "upload",
-          fluidRow(
-            column(2,
-                   fileInput(inputId = "filedata",
-                             label = "Upload data. Choose csv file",
-                             accept = c(".csv")),
-            ),
-            column(2,
-                   fileInput(inputId = "filemap",
-                             label = "Upload map. Choose shapefile",
-                             multiple = TRUE,
-                             accept = c('.shp','.dbf','.sbn','.sbx','.shx','.prj')),
-            )
-          ),
-          fluidRow(
-            column(6,
-            DTOutput("table")  # Table output placeholder
-          ))
-          
+          tabItem(tabName = "upload",
+                  tabBox(
+                    width = 12,
+                    tabPanel("Upload CSV",
+                             fluidRow(
+                               column(4,
+                                      fileInput("filedata", "Choose CSV File",
+                                                accept = c("text/csv", "text/comma-separated-values,text/plain", ".csv"))
+                               )
+                             ),
+                             fluidRow(
+                               column(12,
+                                      h4("Rename Columns"),
+                                      
+                                      DTOutput("rename_table"),
+                                      actionButton("apply_names", "Apply New Column Names")
+                               )
+                             ),
+                             fluidRow(
+                               column(12,
+                                      h4("View Data"),
+                                      DTOutput("view_table")
+                               )
+                             )
+                    ),
+                    tabPanel("Upload Shapefile",
+                             fileInput("filemap", "Choose Shapefile",
+                                       multiple = TRUE,
+                                       accept = c('.shp','.dbf','.sbn','.sbx','.shx','.prj'))
+                    )
+                  )
           ),
          
         tabItem(
@@ -214,15 +224,51 @@ shinyApp(
     #   
     # })
     data <- reactive({
-      req(input$filedata)  # Ensure a file is uploaded
+      req(input$filedata)
       read.csv(input$filedata$datapath)
     })
     
-    # Render the data table showing the first 10 rows
-    output$table <- renderDT({
-      head(data(), 10)
+    renamed_data <- reactiveVal()
+    
+    output$rename_table <- renderDT({
+      req(data())
+      df <- data.frame(
+        Original = names(data()),
+        New = names(data()),
+        stringsAsFactors = FALSE
+      )
+      datatable(df, editable = TRUE)
     })
     
+    observeEvent(input$apply_names, {
+      new_names <- input$rename_table_cell_edit
+      if (!is.null(new_names) && nrow(new_names) > 0) {
+        current_data <- data()
+        for (i in seq_len(nrow(new_names))) {
+          if (new_names$col[i] == 2) {  # Only change names in the "New" column
+            old_name <- names(current_data)[new_names$row[i]]
+            new_name <- new_names$value[i]
+            if (old_name != new_name) {
+              names(current_data)[names(current_data) == old_name] <- new_name
+            }
+          }
+        }
+        renamed_data(current_data)
+      } else {
+        renamed_data(data())
+      }
+    })
+    
+    output$view_table <- renderDT({
+      data_to_show <- if (!is.null(renamed_data())) renamed_data() else data()
+      datatable(data_to_show,
+                options = list(
+                  scrollX = TRUE,
+                  scrollCollapse = TRUE,
+                  autoWidth = TRUE
+                ))
+    })
+  
     glp_total <- glp %>% 
       group_by(Country) %>%
       summarize(count = n())
@@ -354,7 +400,7 @@ shinyApp(
     # Render the plot
     output$diverging_bar_plot_percentages <- renderGirafe({
       bar_width <- 0.75
-      
+    
       # Create the plot
       diverging_bar_plot_percentages <- processed_data() %>%
         mutate(
@@ -367,21 +413,20 @@ shinyApp(
             y = Country_Code,
             width = width,
             fill = !!sym(input$choice_type_stacked),tooltip = paste0("Country: ", Country_Code, "<br>",
-                                                                     "Percentage: ", abs(middle_point),"%")
+                                                                     "Percentage: ",  round(abs(width), 2),"%")
           ),
           height = bar_width
-        ) +
+        ) +scale_fill_manual(values = rev(c("#440154", "#3B528B", "#21908C","#5DC863","#FDE725")))+
         scale_x_continuous(
           breaks = seq(-100, 100, by = 20),
           labels = function(x) paste0(abs(x), "%")
-        )  +
+        ) +
         theme(
           legend.position = "right",
           panel.grid = element_blank(),
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()
-        ) +
-        labs(x = "Percentage of responses", y = "Country")
+        ) +labs(x = "Percentage of responses", y = "Country")
       
       # return(diverging_bar_plot_percentages)
       return(girafe(ggobj = diverging_bar_plot_percentages))
