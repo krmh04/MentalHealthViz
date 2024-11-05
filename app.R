@@ -11,6 +11,7 @@ library(plotly)
 library(leaflet.minicharts)
 library(ggiraph)
 library(DT)
+library(stringdist)
 options(shiny.maxRequestSize = 500 * 1024^2)
 # Visualization code
  glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv",encoding="UTF-8")
@@ -42,12 +43,10 @@ shinyApp(
         menuItem("Home", tabName = "home", icon = icon("home")),
         menuItem("About", tabName = "about", icon = icon("clipboard")),
         menuItem("Upload", tabName = "upload", icon = icon("upload")),
+        menuItem("Config", tabName = "config", icon = icon("gear")),
         
         menuItem("Population Samples", tabName = "samples", icon = icon("person")),
-        menuItem("Mental Health Indicators", tabName = "mentalhealth", icon = icon("notes-medical")),
-        menuItem("Ordinal data", tabName = "ordinal", icon = icon("chart-column")),
-        menuItem("Divergent bar chart", tabName = "stacked", icon = icon("boxes-stacked")),
-        
+        menuItem("Ordinal visualizations", tabName = "ordinal_viz", icon = icon("chart-column")),
         menuItem("Population Pyramid", tabName = "pyramid", icon = icon("cubes"))
  
       )
@@ -135,28 +134,50 @@ shinyApp(
                     )
                   )
           ),
-         
+        tabItem(
+          tabName = "config",
+          fluidRow(
+            # Box for selecting the country column
+            column(12,
+                   box(
+                     title = "Country Column Selection",
+                     width = 12,
+                     collapsible = TRUE,
+                     status = "primary",
+                     
+                     # Country column selection UI
+                     uiOutput("country_col_select")
+                   )
+            ),
+            
+            # Box for Refinement and Other Configuration Settings
+            column(12,
+                   box(
+                     title = "Refinement Settings",
+                     width = 12,
+                     collapsible = TRUE,
+                     status = "primary",
+                     
+                     # Refinement UI and additional column selection inputs
+                     uiOutput("refinement_ui"),
+                     selectInput("gender_col", "Gender Column", choices = NULL),
+                     selectInput("lat_col", "Latitude Column", choices = NULL),
+                     selectInput("lon_col", "Longitude Column", choices = NULL),
+                     
+                      uiOutput("mismatch_ui"),
+                     
+                      actionButton("update_viz", "Update Visualization")
+                   )
+            )
+          )
+        ),
+        
         tabItem(
           tabName = "samples",
-          sidebarLayout(
-            sidebarPanel(
-              width = 3,
-              uiOutput("refinement_ui"),
-              checkboxInput("check_viz", "Is the Visualization Incorrect? ", FALSE),
-              conditionalPanel(
-                condition = "input.check_viz == true",
-                verbatimTextOutput("viz_check_output"),
-                selectInput("country_col", "Country Column", choices = NULL),
-                selectInput("gender_col", "Gender Column", choices = NULL),
-                selectInput("lat_col", "Latitude Column", choices = NULL),
-                selectInput("lon_col", "Longitude Column", choices = NULL),
-                uiOutput("mismatch_ui"),
-                actionButton("update_viz", "Update Visualization")
-              )
-            ),
-            mainPanel(
-              width = 9,
-              leafletOutput("map", height = 600)
+          fluidRow(
+            column(12,
+                     leafletOutput("map", height = 600)
+                   
             )
           )
         ),
@@ -184,43 +205,46 @@ shinyApp(
           )
         ),
         tabItem(
-          tabName = "ordinal",
-          # Dropdown to select the type of population pyramid
-          h4("Respondents' Feelings with regards to Climate Anxiety"),
+          tabName = "ordinal_viz",
+          h4("Mental Health and Climate Anxiety Visualizations"),
           
-          fluidRow(
-            column(width = 6,
-                   # Dropdown to select the type of population pyramid
-                   selectInput("choice_type", "Select the parameter", 
-                                choices = names(new_mhdata)[4:10]) 
+          # Create the tabset panel to contain two tabs
+          tabsetPanel(
+            # First tab for Ordinal data
+            tabPanel(
+              title = "Spatial Viz",
+              h4("Respondents' Feelings with regards to Mental Health"),
+              fluidRow(
+                column(width = 6,
+                       uiOutput("ordinal_choices")
+                ),
+                column(width = 6,
+                       tags$style(type = "text/css", ".leaflet-container {height: 600px; margin: auto;}"),
+                       div(style = "display: flex; align-items: center; margin-left: -152px",
+                           leafletOutput("bar_map", height = 600)
+                       )
+                )
+              )
             ),
-            column(width=6,
-                   tags$style(type="text/css",
-                              ".leaflet-container {height: 600px; margin: auto;}"),
-                   div(style = "display: flex; align-items: center;margin-left: -152px",
-                       leafletOutput("bar_map", height = 600)
-                   )
+            
+            # Second tab for Diverging bar chart data
+            tabPanel(
+              title = "Stacked Divergent Bar Chart",
+              h4("Respondents' Feelings with regards to Climate Anxiety"),
+              fluidRow(
+                column(width = 6,
+                       uiOutput("stacked_choices")
+                ),
+                column(width = 6,
+                       div(style = "height:416px;width:743px;margin-left: -282px",
+                           girafeOutput("diverging_bar_plot_percentages")
+                       )
+                )
+              )
             )
-        )),
-        tabItem(
-          tabName = "stacked",
-          # Dropdown to select the type of population pyramid
-          h4("Respondents' Feelings with regards to Climate Anxiety"),
-          
-          fluidRow(
-            column(width = 6,
-                   # Dropdown to select the type of population pyramid
-                   selectInput("choice_type_stacked", "Select the parameter", 
-                               choices = names(new_mhdata)[4:10]) 
-            ),
-            column(width=6,
-                   div(style = "height:416px;width:743px;margin-left: -282px", 
-                   girafeOutput("diverging_bar_plot_percentages")
-                   )
-                   
-           )
-            )
-          ), 
+          )
+        )
+        , 
         
         
         tabItem(
@@ -244,10 +268,8 @@ shinyApp(
     )
   ),
   server = function(input, output, session) {
+    
 
-    countries <- read_sf('F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/copy_4.shp',options = "ENCODING=WINDOWS-1252")
-    countries <- countries %>% rename(Country = NAME_LONG)
-  
     uploaded_data <- reactiveVal()
     renamed_data <- reactiveVal()
     
@@ -269,18 +291,18 @@ shinyApp(
       updateColumnSelections(data)
     })
     
+    
     # Remove CSV and reset app state
     observeEvent(input$remove_csv, {
       uploaded_data(NULL)
       renamed_data(NULL)
-      selected_cols$country <- NULL
       selected_cols$gender <- NULL
       selected_cols$lat <- NULL
       selected_cols$lon <- NULL
       
         
       # Reset column selection inputs
-      updateSelectInput(session, "country_col", choices = NULL)
+      updateSelectInput(session, "country_col_select", choices = NULL)
       updateSelectInput(session, "gender_col", choices = NULL)
       updateSelectInput(session, "lat_col", choices = NULL)
       updateSelectInput(session, "lon_col", choices = NULL)
@@ -291,15 +313,15 @@ shinyApp(
     
     # Helper function to update column selections
     updateColumnSelections <- function(data) {
-      selected_cols$country <- names(data)[grep("country", tolower(names(data)))]
       selected_cols$gender <- names(data)[grep("gender", tolower(names(data)))]
       selected_cols$lat <- names(data)[grep("lat", tolower(names(data)))]
       selected_cols$lon <- names(data)[grep("lon", tolower(names(data)))]
     
-      updateSelectInput(session, "country_col", choices = names(data), selected = selected_cols$country)
       updateSelectInput(session, "gender_col", choices = names(data), selected = selected_cols$gender)
       updateSelectInput(session, "lat_col", choices = names(data), selected = selected_cols$lat)
       updateSelectInput(session, "lon_col", choices = names(data), selected = selected_cols$lon)
+      updateSelectInput(session, "country_col_select", choices = names(data), selected = input$country_col_select)
+
       }
     
     # Render the rename table
@@ -346,63 +368,300 @@ shinyApp(
                   autoWidth = TRUE
                 ))
     })
+    
+    
+  
+#     mismatches <- reactive({
+#       req(renamed_data(), countries)
+#       data_c <- renamed_data() %>%
+#         group_by(Country) %>%
+#         summarize(count = n())
+#       
+#       country_names <- unique(data_c$Country)
+#       shape_country_names <- unique(countries$Country)
+#       
+#       # Find mismatches
+#       unmatched <- setdiff(country_names, shape_country_names)
+#       return(unmatched)
+#     })
+#     output$mismatch_ui <- renderUI({
+#       unmatched <- mismatches()
+#       if (length(unmatched) > 0) {
+#         lapply(1:length(unmatched), function(i) {
+#           selectInput(
+#             paste0("recode_", unmatched[i]),
+#             label = paste("Recode", unmatched[i]),
+#             choices = unique(countries$Country),
+#             selected = NULL
+#           )
+#         })
+#       } else {
+#         return(NULL)
+#       }
+#     })
+#    observeEvent(input$update_viz, {
+#   selected_cols$country <- input$country_col
+#   selected_cols$gender <- input$gender_col
+#   selected_cols$lat <- input$lat_col
+#   selected_cols$lon <- input$lon_col
+#   
+#   req(mismatches())
+#   unmatched <- mismatches()
+#   
+#   
+# 
+#   
+#   
+#   
+#   recode_map <- lapply(unmatched, function(name) {
+#     input[[paste0("recode_", name)]]
+#   })
+#   
+#   recode_map <- setNames(recode_map, unmatched)
+#   
+#   # Recode the country names in `data_c`
+#   recoded_data <- renamed_data() %>%
+#     mutate(Country = recode(Country, !!!recode_map))
+#   
+#   renamed_data(recoded_data)  # Store the recoded data
+# })
+#    
+#    output$country_col_select <- renderUI({
+#      req(renamed_data())
+#      
+#      # Display available column names
+#      selectInput("country_col", "Select the column representing Country:",
+#                  choices = names(renamed_data()), selected = NULL)
+#    })
+#    
+    output$country_col_select <- renderUI({
+      req(renamed_data())
+      selectInput("country_col_select", "Select the column representing Country:",
+                  choices = names(renamed_data()), selected = NULL)
+    })
+    countries <- read_sf('F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/copy_4.shp',options = "ENCODING=WINDOWS-1252")
+    observeEvent(input$country_col_select, {
+      req(input$country_col_select)
+      countries <<- countries %>% rename(!!sym(input$country_col_select) := NAME_LONG)
+    })
+    
+    
+    # Modified mismatches reactive
+    # mismatches <- reactive({
+    #   req(renamed_data(), countries, input$country_col_select)
+    #   
+    #   # Ensure the selected column exists
+    #   if (!input$country_col_select %in% names(renamed_data())) {
+    #     return(character(0))
+    #   }
+    #   
+    #   data_c <- renamed_data() %>%
+    #     group_by(!!sym(input$country_col_select)) %>%
+    #     summarize(count = n())
+    #   
+    #   # Get unique values from the selected country column
+    #   country_names <- unique(data_c[[input$country_col_select]])
+    #   shape_country_names <- unique(countries[[input$country_col_select]])  # Assuming this is the fixed name in your shapes data
+    #   
+    #   # Find mismatches
+    #   unmatched <- setdiff(country_names, shape_country_names)
+    #   return(unmatched)
+    # })
+    # 
+    # # Modified mismatch_ui output
+    # output$mismatch_ui <- renderUI({
+    #   req(input$country_col_select)
+    #   unmatched <- mismatches()
+    #   
+    #   if (length(unmatched) > 0) {
+    #     lapply(1:length(unmatched), function(i) {
+    #       selectInput(
+    #         paste0("recode_", unmatched[i]),
+    #         label = paste("Recode", unmatched[i], "from", input$country_col_select, "column"),
+    #         choices = unique(countries[[input$country_col_select]]),
+    #         selected = NULL
+    #       )
+    #     })
+    #   } else {
+    #     return(NULL)
+    #   }
+    # })
     mismatches <- reactive({
-      req(renamed_data(), countries)
+      req(renamed_data(), countries, input$country_col_select)
+      
+      if (!input$country_col_select %in% names(renamed_data())) {
+        return(data.frame(Unmatched = character(0), Suggested_Match = character(0)))
+      }
+      
       data_c <- renamed_data() %>%
-        group_by(Country) %>%
+        group_by(!!sym(input$country_col_select)) %>%
         summarize(count = n())
       
-      country_names <- unique(data_c$Country)
-      shape_country_names <- unique(countries$Country)
+      country_names <- unique(data_c[[input$country_col_select]])
+      shape_country_names <- unique(countries[[input$country_col_select]])
       
-      # Find mismatches
       unmatched <- setdiff(country_names, shape_country_names)
-      return(unmatched)
+      
+      suggestions <- sapply(unmatched, function(country) {
+        distances <- stringdist::stringdist(country, shape_country_names, method = "jw")
+        shape_country_names[which.min(distances)]
+      })
+      
+      data.frame(
+        Unmatched = unmatched,
+        Suggested_Match = suggestions,
+        stringsAsFactors = FALSE
+      )
     })
+    
+    # UI for displaying unmatched country names in a table with dropdown options
     output$mismatch_ui <- renderUI({
-      unmatched <- mismatches()
-      if (length(unmatched) > 0) {
-        lapply(1:length(unmatched), function(i) {
-          selectInput(
-            paste0("recode_", unmatched[i]),
-            label = paste("Recode", unmatched[i]),
-            choices = unique(countries$Country),
-            selected = NULL
-          )
-        })
+      req(mismatches())
+      
+      if (nrow(mismatches()) > 0) {
+        DTOutput("mismatch_table")
       } else {
         return(NULL)
       }
     })
-   observeEvent(input$update_viz, {
-  selected_cols$country <- input$country_col
-  selected_cols$gender <- input$gender_col
-  selected_cols$lat <- input$lat_col
-  selected_cols$lon <- input$lon_col
-  
-  req(mismatches())
-  unmatched <- mismatches()
-  
-  recode_map <- lapply(unmatched, function(name) {
-    input[[paste0("recode_", name)]]
-  })
-  
-  recode_map <- setNames(recode_map, unmatched)
-  
-  # Recode the country names in `data_c`
-  recoded_data <- renamed_data() %>%
-    mutate(Country = recode(Country, !!!recode_map))
-  
-  renamed_data(recoded_data)  # Store the recoded data
-})
+    
+    # Helper function to get similar countries
+    getSimilarCountries <- function(country, all_countries, n = 10) {
+      distances <- stringdist::stringdist(country, all_countries, method = "jw")
+      all_countries[order(distances)[1:min(n, length(distances))]]
+    }
+    
+    # Render the data table
+    output$mismatch_table <- renderDT({
+      req(countries, input$country_col_select)
+      
+      # Get all possible country names from the shape file
+      all_countries <- unique(countries[[input$country_col_select]])
+      
+      # Create the datatable
+      datatable(
+        mismatches(),
+        editable = list(
+          target = 'cell',
+          disable = list(columns = 1),
+          type = 'select'
+        ),
+        options = list(
+          dom = 't',
+          paging = FALSE,
+          ordering = FALSE
+        )
+      ) %>%
+        # Add dropdown options for each unmatched country
+        formatStyle(
+          'Suggested_Match',
+          textAlign = 'left'
+        ) %>%
+        # Define the dropdown options for each row
+        DT::coerceValue(., list(
+          columns = list(
+            list(
+              targets = 1,
+              render = JS(sprintf(
+                "function(data, type, row) {
+              if (type === 'edit') {
+                var options = %s;
+                return options[row[0]] || options['default'];
+              }
+              return data;
+            }",
+                jsonlite::toJSON(sapply(
+                  mismatches()$Unmatched,
+                  function(country) {
+                    similar_countries <- getSimilarCountries(country, all_countries)
+                    paste(similar_countries, collapse = ':')
+                  },
+                  simplify = FALSE
+                ))
+              ))
+            )
+          )
+        ))
+    })
+    
+    # Observer to handle updates when the user clicks on 'Update Visualization'
+    observeEvent(input$update_viz, {
+      req(input$country_col_select, input$mismatch_table_cell_edit)
+      
+      # Create recode map from edited cells
+      recode_map <- setNames(
+        sapply(input$mismatch_table_cell_edit, function(edit) edit$value),
+        mismatches()$Unmatched[sapply(input$mismatch_table_cell_edit, function(edit) edit$row + 1)]
+      )
+      
+      # Apply recoding
+      recoded_data <- renamed_data() %>%
+        mutate(!!sym(input$country_col_select) := recode(!!sym(input$country_col_select), !!!recode_map))
+      
+      renamed_data(recoded_data)
+      
+      showNotification(
+        "Country matches have been updated successfully!",
+        type = "success",
+        duration = 5
+      )
+    })
+    
+    # Add validation to notify users if selected column doesn't exist
+    observe({
+      req(renamed_data())
+      if (!is.null(input$country_col_select) && !input$country_col_select %in% names(renamed_data())) {
+        showNotification(
+          "Selected country column no longer exists in the data. Please select a valid column.",
+          type = "warning",
+          duration = 10
+        )
+      }
+    }) 
+    
+     
+    
+    # Modified update_viz observer
+    # observeEvent(input$update_viz, {
+    #   req(input$country_col_select)
+    #   
+    #   unmatched <- mismatches()
+    #   
+    #   # Create recode map
+    #   recode_map <- lapply(unmatched, function(name) {
+    #     input[[paste0("recode_", name)]]
+    #   })
+    #   recode_map <- setNames(recode_map, unmatched)
+    #   
+    #   # Recode the country names using the dynamic column name
+    #   recoded_data <- renamed_data() %>%
+    #     mutate(!!sym(input$country_col_select) := recode(!!sym(input$country_col_select), !!!recode_map))
+    #   
+    #   renamed_data(recoded_data)
+    # })
+    # 
+    # # Add validation
+    # observe({
+    #   req(renamed_data())
+    #   if (!is.null(input$country_col_select) && !input$country_col_select %in% names(renamed_data())) {
+    #     showNotification(
+    #       "Selected country column no longer exists in the data. Please select a valid column.",
+    #       type = "warning",
+    #       duration = 10
+    #     )
+    #   }
+    # })
+    # 
+    
+    
     
     # Reactive expression for the map data
     map_data <- reactive({
-      req(renamed_data(), selected_cols$country, selected_cols$gender, selected_cols$lat, selected_cols$lon)
+      req(renamed_data(),input$country_col_select, selected_cols$gender, selected_cols$lat, selected_cols$lon)
       data <- renamed_data()
       
       data %>%
-        select(Country = selected_cols$country, 
+        select(Country = input$country_col_select, 
                Gender = selected_cols$gender, 
                latitude = selected_cols$lat, 
                longitude = selected_cols$lon) %>%
@@ -420,10 +679,11 @@ shinyApp(
       gender_data <- map_data()
      
      
+      
       data_c <- data_c %>%
-         group_by(Country) %>%
+         group_by(!!sym(input$country_col_select)) %>%
          summarize(count = n())
-       countries <- merge(countries, data_c, by = 'Country', all.x = F)
+       countries <- merge(countries, data_c, by = input$country_col_select, all.x = F)
       
       
        color_mapping <- c(
@@ -432,18 +692,29 @@ shinyApp(
          "Other" = "#c8F213", 
          "Don't know/ Prefer not to say" = "#171717"
        )
-       actual_categories <- setdiff(names(gender_data), c("Country", "latitude", "longitude"))
+       actual_categories <- setdiff(names(gender_data), c("Country", "latitude", "longitude","Country_Code","NA"))
        colors <- color_mapping[actual_categories]
        
        # Ensure that missing categories in the color mapping are handled (if new/unexpected categories are present)
         
        
-      costBins <- c(500, 700,900,1100,Inf)
-      # custom_colors <- c("#fde8cd", "#fddcc0", "#fcc5aa", "#d57b7b")
+       
+       costBins <- seq(from = min(countries$count), 
+                       to = max(countries$count), 
+                       length.out = 6)
+       
+       # custom_colors <- c("#fde8cd", "#fddcc0", "#fcc5aa", "#d57b7b")
       custom_colors <- c("#f0f9e8", "#bae4bc", "#7bccc4", "#2b8cbe")
         paletteBinned <- colorBin(palette = custom_colors, domain = countries$count, bins = costBins)
-      
-      leaflet(gender_data) %>%
+        
+        c_labels <- paste(
+          round(head(costBins, -1)), 
+          round(tail(costBins, -1)),
+          sep = "-"
+        )
+        c_labels[length(c_labels)] <- sprintf("≥%s", round(costBins[length(costBins)-1]))
+        
+        leaflet(gender_data) %>%
         addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
         setView(lng = mean(gender_data$longitude), lat = mean(gender_data$latitude), zoom = 2) %>%
         
@@ -460,9 +731,9 @@ shinyApp(
                     # specify that the each state should be colored per paletteNum()
                     fillColor = ~paletteBinned(countries$count)) %>% addLegend(pal = paletteBinned, values = countries$count,
                                                                              title = '<small>No of participants</small>',
-                                                                             labels = c("500-700", "700-900", "900-1100", ">1100"),
+                                                                             labels =c_labels,
                                                                              labFormat = function(type, cuts, p) {
-                                                                                labels <- c("500-700", "700-900", "900-1100", ">1100")
+                                                                                labels <- c_labels
                                                                                return(labels)
                                                                              },
                                                                              position = 'bottomleft') |> 
@@ -480,70 +751,158 @@ shinyApp(
     })
     
     # For ordinal data
+    # Declare a reactive expression to cache valid column names
+    valid_columns <- reactive({
+      req(renamed_data())
+      
+      # Get all valid columns (numeric, factor, or character)
+      valid_cols <- names(renamed_data())[sapply(renamed_data(), function(x) 
+        is.numeric(x) || is.factor(x) || is.character(x))]
+      
+      # Define a pattern for columns to exclude (country, latitude, longitude, age, gender, etc.)
+      exclusion_pattern <- "(sn|country|latitude|longitude|age|gender|sex|location|city|region)"
+      
+      # Exclude columns that match the pattern
+      valid_cols <- valid_cols[!grepl(exclusion_pattern, tolower(valid_cols))]
+      
+      return(valid_cols)
+    })
+    output$ordinal_choices <- renderUI({
+      req(valid_columns())  # Check that valid columns are available
+      selectInput("choice_type", "Select the parameter", 
+                  choices = valid_columns())
+    })
+    
+    # Optionally, you could also use observeEvent to update the UI based on changes to renamed_data()
+    observeEvent(renamed_data(), {
+      updateSelectInput(session, "choice_type", 
+                        choices = valid_columns())
+    })
     colors_for_mh <- c("#06C", "#8481DD", "#4CB140","#005F60","#F4C145")
-    
+
+    # reactive_mh_data <- reactive({
+    #   new_mhdata |>
+    #     group_by(Country_Code, !!sym(input$`choice_type`), latitude, longitude) |>
+    #     summarize(count = n()) |>
+    #     pivot_wider(names_from = !!sym(input$`choice_type`), values_from = count, values_fill = 0)
+    # })
+    # 
+    # output$bar_map <- renderLeaflet({
+    #   reactive_mh <- reactive_mh_data()
+    # 
+    #   leaflet() %>%
+    #     addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
+    #     setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
+    # 
+    #     addMinicharts(reactive_mh$longitude, reactive_mh$latitude,type = "pie", chartdata = reactive_mh[, 4:8],
+    #                   colorPalette = colors_for_mh, width = 35, height = 35, transitionTime = 0)
+    # })
+    # 
+
+
     reactive_mh_data <- reactive({
-      new_mhdata |>   
-        group_by(Country_Code, !!sym(input$`choice_type`), latitude, longitude) |> 
-        summarize(count = n()) |> 
-        pivot_wider(names_from = !!sym(input$`choice_type`), values_from = count, values_fill = 0)
+      req(renamed_data(),input$country_col_select, input$choice_type)
+      
+      renamed_data() %>%
+        group_by(!!sym(input$country_col_select), !!sym(input$choice_type), latitude, longitude) %>%
+        summarize(count = n()) %>%
+        pivot_wider(names_from = !!sym(input$choice_type), 
+                    values_from = count, 
+                    values_fill = 0)
     })
-    
     output$bar_map <- renderLeaflet({
-      reactive_mh <- reactive_mh_data()
-      
-      leaflet() %>% 
-        addProviderTiles(providers$CartoDB.PositronNoLabels) %>% 
-        setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
-        
-        addMinicharts(reactive_mh$longitude, reactive_mh$latitude,type = "pie", chartdata = reactive_mh[, 4:8], 
-                      colorPalette = colors_for_mh, width = 35, height = 35, transitionTime = 0)
+  req(reactive_mh_data())
+  reactive_mh <- reactive_mh_data()
+  
+  # Get the number of unique categories in the selected column
+  n_cats <- ncol(reactive_mh)  # subtract Country_Code, latitude, longitude
+  # Adjust colors if needed
+  colors_to_use <- colors_for_mh[1:n_cats]
+  
+  leaflet() %>%
+    addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
+    setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
+    addMinicharts(
+      reactive_mh$longitude, 
+      reactive_mh$latitude,
+      type = "pie", 
+      chartdata = reactive_mh[, 4:(n_cats)],
+      colorPalette = colors_to_use, 
+      width = 35, 
+      height = 35, 
+      transitionTime = 0
+    )
+})
+     
+    output$stacked_choices <- renderUI({
+      req(valid_columns())  # Check that valid columns are available
+      selectInput("choice_type_stacked", "Select the parameter", 
+                  choices = valid_columns())
     })
-   
+    
+    # Optionally, you could also use observeEvent to update the UI based on changes to renamed_data()
+    observeEvent(renamed_data(), {
+      updateSelectInput(session, "choice_type_stacked", 
+                        choices = valid_columns())
+    })
     
     
-    #For divergent stacked bar charts
-    
+  # For divergent stacked bar charts
+
      processed_data <- reactive({
+       
+       req(renamed_data(),input$country_col_select)
+       
       choice_type_stacked <- input$choice_type_stacked
+      for_new_mh<-renamed_data()
       
-      dat_longer <- new_mhdata |>   
-        group_by(Country_Code, !!sym(choice_type_stacked)) |> 
+      dat_longer <- for_new_mh |>
+        group_by(!!sym(input$country_col_select), !!sym(choice_type_stacked)) |>
         summarize(count = n())
-      
-      dat_longer <- dat_longer |>  
+
+      dat_longer <- dat_longer |>
         pivot_wider(names_from = !!sym(choice_type_stacked), values_from = count, values_fill = 0)
+
+      dat_longer <- if("NA" %in% names(dat_longer)) {
+        dat_longer %>% rename(None = 'NA')
+      } else {
+        dat_longer  
+      }
       
-      dat_longer <- dat_longer %>% rename(None = 'NA')
       dat_for_plot <- dat_longer %>%
         pivot_longer(
-          cols = 2:7,  
-          names_to = choice_type_stacked,      
-          values_to = "count") 
-      
+          cols = where(is.numeric),
+          names_to = choice_type_stacked,
+          values_to = "count")
+
       colnames(dat_longer) <- gsub("[\r\n]", "", colnames(dat_longer))
+
+      dat_filtered <- if(any(dat_for_plot[[choice_type_stacked]] %in% c('NA', 'None'))) {
+        dat_for_plot %>%
+          filter(!!sym(choice_type_stacked) != "None")
+      } else {
+        dat_for_plot  # Return original dataframe if neither value exists
+      }
       
-      dat_filtered <- dat_for_plot %>%
-        filter(!!sym(choice_type_stacked) != "None")
       
       dat_filtered[[choice_type_stacked]] <- trimws(as.character(dat_filtered[[choice_type_stacked]]))
-      
+
       levels_order <- c("Not at all", "Somewhat", "Moderately", "Very much", "Extremely")
-      
-      dat_filtered[[choice_type_stacked]] <- factor(dat_filtered[[choice_type_stacked]], 
+
+      dat_filtered[[choice_type_stacked]] <- factor(dat_filtered[[choice_type_stacked]],
                                                     levels = levels_order, ordered = TRUE)
        dat_filtered <- dat_filtered %>%
-        arrange(Country_Code, !!sym(choice_type_stacked)) %>%
-        group_by(Country_Code) %>%
+        arrange(!!sym(input$country_col_select), !!sym(choice_type_stacked)) %>%
+        group_by(!!sym(input$country_col_select)) %>%
         mutate(
           total_responses = sum(count),
           percentage = count / total_responses * 100
         ) %>%
         ungroup()
-   
-      
+
+
       computed_values <- dat_filtered %>%
-        group_by(Country_Code) %>%
+        group_by(!!sym(input$country_col_select)) %>%
         mutate(
           middle_shift = sum(percentage[1:2]),
           lagged_percentage = lag(percentage, default = 0),
@@ -553,26 +912,26 @@ shinyApp(
           width = right - left
         ) %>%
         ungroup()
-      
+
       return(computed_values)
     })
-    
+
     # Render the plot
     output$diverging_bar_plot_percentages <- renderGirafe({
       bar_width <- 0.75
-    
+
       # Create the plot
       diverging_bar_plot_percentages <- processed_data() %>%
         mutate(
-          label = factor(Country_Code, levels = unique(Country_Code)) %>% fct_rev()
+          label = factor(!!sym(input$country_col_select), levels = unique(!!sym(input$country_col_select))) %>% fct_rev()
         ) %>%
         ggplot() +
         geom_tile_interactive(
           aes(
             x = middle_point,
-            y = Country_Code,
+            y = !!sym(input$country_col_select),
             width = width,
-            fill = !!sym(input$choice_type_stacked),tooltip = paste0("Country: ", Country_Code, "<br>",
+            fill = !!sym(input$choice_type_stacked),tooltip = paste0("Country: ", !!sym(input$country_col_select), "<br>",
                                                                      "Percentage: ",  round(abs(width), 2),"%")
           ),
           height = bar_width
@@ -587,22 +946,11 @@ shinyApp(
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank()
         ) +labs(x = "Percentage of responses", y = "Country")
-      
+
       # return(diverging_bar_plot_percentages)
       return(girafe(ggobj = diverging_bar_plot_percentages))
   })
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+
     
     mh_yn <- glp %>% group_by(Country, I13) %>% summarize(count = n()) %>% pivot_wider(names_from = I13, values_from = count)
     glp_indicators <- glp %>% rename(anxiety = 'C1_6', death = 'C1_4', loneliness = 'C1_1') %>%
@@ -648,11 +996,13 @@ shinyApp(
     })
     
     
-
+#For population pyramid data
     
     
       
     filtered_data <- reactive({
+             req(renamed_data(),input$country_col_select)
+
       glp %>% 
         filter(Country == input$`pyramid-dropdown`) %>%  
         filter(Gender %in% c("Female", "Male")) %>%   
@@ -662,8 +1012,11 @@ shinyApp(
         mutate(Male = -Male)  # Make male counts negative
     })
     output$country_ui <- renderUI({
+      req(renamed_data(),input$country_col_select)
+    glp_country<-renamed_data()
+      
       if (input$pyramid_type != "") {
-        selectInput("pyramid-dropdown", "Country", choices = sort(unique(glp$Country)), selected = "Argentina")
+        selectInput("pyramid-dropdown", "Country", choices = sort(unique(glp_country$Country)), selected = NULL)
         
       }
       
