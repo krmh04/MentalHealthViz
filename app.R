@@ -12,9 +12,16 @@ library(leaflet.minicharts)
 library(ggiraph)
 library(DT)
 library(stringdist)
+library(fst)
+library(thematic)
 options(shiny.maxRequestSize = 500 * 1024^2)
 # Visualization code
- glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv",encoding="UTF-8")
+ 
+thematic_shiny()
+
+
+
+glp <- read.csv("F:/PE & RE Electives Semester-3/MentalHealthViz/Main_GLP.csv",encoding="UTF-8")
 new_mhdata <- read_csv("F:/PE & RE Electives Semester-3/MentalHealthViz/geocoded_ProfOgunbode.csv")
 names(new_mhdata) <- gsub("[\r\n]", "", names(new_mhdata))
 
@@ -34,7 +41,7 @@ shinyApp(
     footer = NULL,
     options = NULL,
     fullscreen = TRUE,
-    help = TRUE,
+    help = NULL,
     scrollToTop = TRUE,
     
     sidebar = dashboardSidebar(
@@ -46,7 +53,8 @@ shinyApp(
         menuItem("Config", tabName = "config", icon = icon("gear")),
         
         menuItem("Population Samples", tabName = "samples", icon = icon("person")),
-        menuItem("Ordinal visualizations", tabName = "ordinal_viz", icon = icon("chart-column")),
+        menuItem("Mental Health Indicators", tabName = "mentalhealth", icon = icon("notes-medical")),
+           menuItem("Ordinal visualizations", tabName = "ordinal_viz", icon = icon("chart-column")),
         menuItem("Population Pyramid", tabName = "pyramid", icon = icon("cubes"))
  
       )
@@ -95,11 +103,13 @@ shinyApp(
         tabItem(
           
           tabName = "about",
-          h1("About the tool"),  
-          "The focus is to investigate spatial as well as non-spatial analysis of co-occurrence of different mental health  conditions. 
+          h1("About MentalHealthViz"),  
+          p("The focus is to investigate spatial as well as non-spatial analysis of co-occurrence of different mental health  conditions. 
           The expected outcome, a visual analytics tool, is designed to explore different sections of the 
-          data available about different mental health indicators.We have visualizations with maps, simple and stacked bar charts, scatter plots, population pyramids, and others."
-        ),
+          data available about different mental health indicators.We have visualizations with maps, simple and stacked bar charts, scatter plots, population pyramids, and others."),
+          imageOutput("new_logo")
+          
+          ),
           tabItem(tabName = "upload",
                   tabBox(
                     width = 12,
@@ -168,7 +178,19 @@ shinyApp(
                      
                       actionButton("update_viz", "Update Visualization")
                    )
-            )
+            ),
+            column(12,
+                   box(
+                     title = "Levels Reorder",
+                     width = 12,
+                     collapsible = TRUE,
+                     status = "primary",
+                     
+                     # Refinement UI and additional column selection inputs
+                     uiOutput("levels_order_ui")
+                   )
+            ) 
+            
           )
         ),
         
@@ -181,25 +203,13 @@ shinyApp(
             )
           )
         ),
+        
+        # Remaining work -complete by 20:00
         tabItem(
           tabName = "mentalhealth",
-          h4("What did people say when they were asked if they had any physical or mental health conditions or illnesses lasting or expected to last 12 months or more?"),
-          fluidRow(
-            column(3,
-                   selectInput("parameter_mhyn", "Select Parameter:",
-                               choices = c("Yes", "No","Don't know / Prefer not to say"),
-                               selected = "Yes")
-            ),
-            
-            column(9,plotlyOutput("plot_yn")
-            ),
-            
-          ),  
-          sidebarPanel(
-            checkboxGroupInput("conditions", "Select conditions:",
-                               choices = c("Anxiety", "Death", "Loneliness"),
-                               selected = "Anxiety")
-          ),
+          uiOutput("dynamic_conditions") 
+        
+          ,
           mainPanel(
             plotlyOutput("plot_mentalhealth",width = 1164, height = 416)
           )
@@ -261,18 +271,29 @@ shinyApp(
                    # Country dropdown menu
                    uiOutput("country_ui")
             )),
-          # Plot output based on the selection
-          uiOutput("dynamic_plots")
+          
+          # Remaining work -complete by 22:00
+          
+           uiOutput("dynamic_plots")
         )
       )
     )
   ),
   server = function(input, output, session) {
     
-
+    useAutoColor()
+    
     uploaded_data <- reactiveVal()
     renamed_data <- reactiveVal()
-    
+    output$new_logo <- renderImage({
+      filename <- "www/new_logo.png"
+      
+      list(
+        src = filename,
+        contentType = "image/png",
+        height = "auto"  
+      )
+    }, deleteFile = FALSE)
     # Reactive values for column selections
     selected_cols <- reactiveValues(
       country = NULL,
@@ -399,32 +420,33 @@ shinyApp(
 #         return(NULL)
 #       }
 #     })
-#    observeEvent(input$update_viz, {
-#   selected_cols$country <- input$country_col
-#   selected_cols$gender <- input$gender_col
-#   selected_cols$lat <- input$lat_col
-#   selected_cols$lon <- input$lon_col
-#   
-#   req(mismatches())
-#   unmatched <- mismatches()
-#   
-#   
-# 
-#   
-#   
-#   
-#   recode_map <- lapply(unmatched, function(name) {
-#     input[[paste0("recode_", name)]]
-#   })
-#   
-#   recode_map <- setNames(recode_map, unmatched)
-#   
-#   # Recode the country names in `data_c`
-#   recoded_data <- renamed_data() %>%
-#     mutate(Country = recode(Country, !!!recode_map))
-#   
-#   renamed_data(recoded_data)  # Store the recoded data
-# })
+
+   observeEvent(input$update_viz, {
+  selected_cols$country <- input$country_col
+  selected_cols$gender <- input$gender_col
+  selected_cols$lat <- input$lat_col
+  selected_cols$lon <- input$lon_col
+
+  req(mismatches())
+  unmatched <- mismatches()
+
+
+
+
+
+
+  recode_map <- lapply(unmatched, function(name) {
+    input[[paste0("recode_", name)]]
+  })
+
+  recode_map <- setNames(recode_map, unmatched)
+
+  # Recode the country names in `data_c`
+  recoded_data <- renamed_data() %>%
+    mutate(Country = recode(Country, !!!recode_map))
+
+  renamed_data(recoded_data)  # Store the recoded data
+})
 #    
 #    output$country_col_select <- renderUI({
 #      req(renamed_data())
@@ -439,7 +461,7 @@ shinyApp(
       selectInput("country_col_select", "Select the column representing Country:",
                   choices = names(renamed_data()), selected = NULL)
     })
-    countries <- read_sf('F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/copy_4.shp',options = "ENCODING=WINDOWS-1252")
+    countries<-readRDS("simplified_countries.rds")
     observeEvent(input$country_col_select, {
       req(input$country_col_select)
       countries <<- countries %>% rename(!!sym(input$country_col_select) := NAME_LONG)
@@ -515,96 +537,96 @@ shinyApp(
     })
     
     # UI for displaying unmatched country names in a table with dropdown options
-    output$mismatch_ui <- renderUI({
-      req(mismatches())
-      
-      if (nrow(mismatches()) > 0) {
-        DTOutput("mismatch_table")
-      } else {
-        return(NULL)
-      }
-    })
-    
-    # Helper function to get similar countries
-    getSimilarCountries <- function(country, all_countries, n = 10) {
-      distances <- stringdist::stringdist(country, all_countries, method = "jw")
-      all_countries[order(distances)[1:min(n, length(distances))]]
-    }
-    
-    # Render the data table
-    output$mismatch_table <- renderDT({
-      req(countries, input$country_col_select)
-      
-      # Get all possible country names from the shape file
-      all_countries <- unique(countries[[input$country_col_select]])
-      
-      # Create the datatable
-      datatable(
-        mismatches(),
-        editable = list(
-          target = 'cell',
-          disable = list(columns = 1),
-          type = 'select'
-        ),
-        options = list(
-          dom = 't',
-          paging = FALSE,
-          ordering = FALSE
-        )
-      ) %>%
-        # Add dropdown options for each unmatched country
-        formatStyle(
-          'Suggested_Match',
-          textAlign = 'left'
-        ) %>%
-        # Define the dropdown options for each row
-        DT::coerceValue(., list(
-          columns = list(
-            list(
-              targets = 1,
-              render = JS(sprintf(
-                "function(data, type, row) {
-              if (type === 'edit') {
-                var options = %s;
-                return options[row[0]] || options['default'];
-              }
-              return data;
-            }",
-                jsonlite::toJSON(sapply(
-                  mismatches()$Unmatched,
-                  function(country) {
-                    similar_countries <- getSimilarCountries(country, all_countries)
-                    paste(similar_countries, collapse = ':')
-                  },
-                  simplify = FALSE
-                ))
-              ))
-            )
-          )
-        ))
-    })
+    # output$mismatch_ui <- renderUI({
+    #   req(mismatches())
+    #   
+    #   if (nrow(mismatches()) > 0) {
+    #     DTOutput("mismatch_table")
+    #   } else {
+    #     return(NULL)
+    #   }
+    # })
+    # 
+    # # Helper function to get similar countries
+    # getSimilarCountries <- function(country, all_countries, n = 10) {
+    #   distances <- stringdist::stringdist(country, all_countries, method = "jw")
+    #   all_countries[order(distances)[1:min(n, length(distances))]]
+    # }
+    # 
+    # # Render the data table
+    # output$mismatch_table <- renderDT({
+    #   req(countries, input$country_col_select)
+    #   
+    #   # Get all possible country names from the shape file
+    #   all_countries <- unique(countries[[input$country_col_select]])
+    #   
+    #   # Create the datatable
+    #   datatable(
+    #     mismatches(),
+    #     editable = list(
+    #       target = 'cell',
+    #       disable = list(columns = 1),
+    #       type = 'select'
+    #     ),
+    #     options = list(
+    #       dom = 't',
+    #       paging = FALSE,
+    #       ordering = FALSE
+    #     )
+    #   ) %>%
+    #     # Add dropdown options for each unmatched country
+    #     formatStyle(
+    #       'Suggested_Match',
+    #       textAlign = 'left'
+    #     ) %>%
+    #     # Define the dropdown options for each row
+    #     DT::coerceValue(., list(
+    #       columns = list(
+    #         list(
+    #           targets = 1,
+    #           render = JS(sprintf(
+    #             "function(data, type, row) {
+    #           if (type === 'edit') {
+    #             var options = %s;
+    #             return options[row[0]] || options['default'];
+    #           }
+    #           return data;
+    #         }",
+    #             jsonlite::toJSON(sapply(
+    #               mismatches()$Unmatched,
+    #               function(country) {
+    #                 similar_countries <- getSimilarCountries(country, all_countries)
+    #                 paste(similar_countries, collapse = ':')
+    #               },
+    #               simplify = FALSE
+    #             ))
+    #           ))
+    #         )
+    #       )
+    #     ))
+    # })
     
     # Observer to handle updates when the user clicks on 'Update Visualization'
     observeEvent(input$update_viz, {
       req(input$country_col_select, input$mismatch_table_cell_edit)
       
       # Create recode map from edited cells
-      recode_map <- setNames(
-        sapply(input$mismatch_table_cell_edit, function(edit) edit$value),
-        mismatches()$Unmatched[sapply(input$mismatch_table_cell_edit, function(edit) edit$row + 1)]
-      )
-      
-      # Apply recoding
-      recoded_data <- renamed_data() %>%
-        mutate(!!sym(input$country_col_select) := recode(!!sym(input$country_col_select), !!!recode_map))
-      
-      renamed_data(recoded_data)
-      
-      showNotification(
-        "Country matches have been updated successfully!",
-        type = "success",
-        duration = 5
-      )
+      # recode_map <- setNames(
+      #   sapply(input$mismatch_table_cell_edit, function(edit) edit$value),
+      #   mismatches()$Unmatched[sapply(input$mismatch_table_cell_edit, function(edit) edit$row + 1)]
+      # )
+      # 
+      # # Apply recoding
+      # recoded_data <- renamed_data() %>%
+      #   mutate(!!sym(input$country_col_select) := recode(!!sym(input$country_col_select), !!!recode_map))
+      # 
+      # renamed_data(recoded_data)
+      # 
+      # showNotification(
+      #   "Country matches have been updated successfully!",
+      #   type = "success",
+      #   duration = 5
+      # )
     })
     
     # Add validation to notify users if selected column doesn't exist
@@ -685,35 +707,20 @@ shinyApp(
          summarize(count = n())
        countries <- merge(countries, data_c, by = input$country_col_select, all.x = F)
       
-      
        color_mapping <- c(
-         "Male" = "#fe9929", 
-         "Female" = "#dd22dd", 
-         "Other" = "#c8F213", 
-         "Don't know/ Prefer not to say" = "#171717"
-       )
-       actual_categories <- setdiff(names(gender_data), c("Country", "latitude", "longitude","Country_Code","NA"))
-       colors <- color_mapping[actual_categories]
-       
-       # Ensure that missing categories in the color mapping are handled (if new/unexpected categories are present)
-        
+         "Male" = "#0096FF", 
+         "Female" = "#FFB6C1")
+       actual_categories <- setdiff(names(gender_data), c("Country", "latitude", "longitude","Country_Code","NA","Don't know/ Prefer not to say","Other"))
+       colors <- color_mapping
        
        
-       costBins <- seq(from = min(countries$count), 
-                       to = max(countries$count), 
-                       length.out = 6)
+       
+       
        
        # custom_colors <- c("#fde8cd", "#fddcc0", "#fcc5aa", "#d57b7b")
-      custom_colors <- c("#f0f9e8", "#bae4bc", "#7bccc4", "#2b8cbe")
-        paletteBinned <- colorBin(palette = custom_colors, domain = countries$count, bins = costBins)
-        
-        c_labels <- paste(
-          round(head(costBins, -1)), 
-          round(tail(costBins, -1)),
-          sep = "-"
-        )
-        c_labels[length(c_labels)] <- sprintf("≥%s", round(costBins[length(costBins)-1]))
-        
+       paletteContinuous <- colorNumeric(palette = "YlGn", domain = countries$count)       
+       
+       
         leaflet(gender_data) %>%
         addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
         setView(lng = mean(gender_data$longitude), lat = mean(gender_data$latitude), zoom = 2) %>%
@@ -729,14 +736,10 @@ shinyApp(
                     fillOpacity = .75,
 
                     # specify that the each state should be colored per paletteNum()
-                    fillColor = ~paletteBinned(countries$count)) %>% addLegend(pal = paletteBinned, values = countries$count,
-                                                                             title = '<small>No of participants</small>',
-                                                                             labels =c_labels,
-                                                                             labFormat = function(type, cuts, p) {
-                                                                                labels <- c_labels
-                                                                               return(labels)
-                                                                             },
-                                                                             position = 'bottomleft') |> 
+                    fillColor = ~paletteBinned(countries$count)) %>% addLegend(pal = paletteContinuous, values = countries$count,
+                                                                               title = '<small>No of participants</small>',
+                                                                               
+                                                                               position = 'bottomleft') |> 
         
         addMinicharts(
           gender_data$longitude, 
@@ -759,7 +762,6 @@ shinyApp(
       valid_cols <- names(renamed_data())[sapply(renamed_data(), function(x) 
         is.numeric(x) || is.factor(x) || is.character(x))]
       
-      # Define a pattern for columns to exclude (country, latitude, longitude, age, gender, etc.)
       exclusion_pattern <- "(sn|country|latitude|longitude|age|gender|sex|location|city|region)"
       
       # Exclude columns that match the pattern
@@ -773,33 +775,14 @@ shinyApp(
                   choices = valid_columns())
     })
     
-    # Optionally, you could also use observeEvent to update the UI based on changes to renamed_data()
     observeEvent(renamed_data(), {
       updateSelectInput(session, "choice_type", 
                         choices = valid_columns())
     })
     colors_for_mh <- c("#06C", "#8481DD", "#4CB140","#005F60","#F4C145")
 
-    # reactive_mh_data <- reactive({
-    #   new_mhdata |>
-    #     group_by(Country_Code, !!sym(input$`choice_type`), latitude, longitude) |>
-    #     summarize(count = n()) |>
-    #     pivot_wider(names_from = !!sym(input$`choice_type`), values_from = count, values_fill = 0)
-    # })
-    # 
-    # output$bar_map <- renderLeaflet({
-    #   reactive_mh <- reactive_mh_data()
-    # 
-    #   leaflet() %>%
-    #     addProviderTiles(providers$CartoDB.PositronNoLabels) %>%
-    #     setView(lng = 78.9629, lat = 20.5937, zoom = 5) %>%
-    # 
-    #     addMinicharts(reactive_mh$longitude, reactive_mh$latitude,type = "pie", chartdata = reactive_mh[, 4:8],
-    #                   colorPalette = colors_for_mh, width = 35, height = 35, transitionTime = 0)
-    # })
-    # 
 
-
+  
     reactive_mh_data <- reactive({
       req(renamed_data(),input$country_col_select, input$choice_type)
       
@@ -849,9 +832,29 @@ shinyApp(
     
   # For divergent stacked bar charts
 
+    output$levels_order_ui <- renderUI({
+      req(reactive_mh_data())
+      reactive_mh <- reactive_mh_data()
+      relevant_columns <- reactive_mh[, 4:ncol(reactive_mh), drop = FALSE]
+      
+      # Get unique levels across all selected columns
+      column_names <- colnames(reactive_mh)[4:ncol(reactive_mh)]      
+      
+      selectizeInput(
+        inputId = "levels_order",
+        label = "Reorder Levels",
+        choices = column_names,
+        multiple = TRUE,
+        selected = column_names,  # Default to the current order
+        options = list(placeholder = 'Select all levels in the desired order')
+      )
+    })
+    
+    
+    
      processed_data <- reactive({
        
-       req(renamed_data(),input$country_col_select)
+       req(renamed_data(),input$country_col_select,input$levels_order)
        
       choice_type_stacked <- input$choice_type_stacked
       for_new_mh<-renamed_data()
@@ -863,11 +866,6 @@ shinyApp(
       dat_longer <- dat_longer |>
         pivot_wider(names_from = !!sym(choice_type_stacked), values_from = count, values_fill = 0)
 
-      dat_longer <- if("NA" %in% names(dat_longer)) {
-        dat_longer %>% rename(None = 'NA')
-      } else {
-        dat_longer  
-      }
       
       dat_for_plot <- dat_longer %>%
         pivot_longer(
@@ -877,20 +875,21 @@ shinyApp(
 
       colnames(dat_longer) <- gsub("[\r\n]", "", colnames(dat_longer))
 
-      dat_filtered <- if(any(dat_for_plot[[choice_type_stacked]] %in% c('NA', 'None'))) {
+      dat_filtered <- if(any(dat_for_plot[[choice_type_stacked]] %in% c('None'))) {
         dat_for_plot %>%
           filter(!!sym(choice_type_stacked) != "None")
       } else {
-        dat_for_plot  # Return original dataframe if neither value exists
+        dat_for_plot
       }
       
       
       dat_filtered[[choice_type_stacked]] <- trimws(as.character(dat_filtered[[choice_type_stacked]]))
 
-      levels_order <- c("Not at all", "Somewhat", "Moderately", "Very much", "Extremely")
 
+      levels_order <- input$levels_order
       dat_filtered[[choice_type_stacked]] <- factor(dat_filtered[[choice_type_stacked]],
-                                                    levels = levels_order, ordered = TRUE)
+                                                    levels = levels_order, 
+                                                    ordered = TRUE)
        dat_filtered <- dat_filtered %>%
         arrange(!!sym(input$country_col_select), !!sym(choice_type_stacked)) %>%
         group_by(!!sym(input$country_col_select)) %>%
@@ -923,7 +922,7 @@ shinyApp(
       # Create the plot
       diverging_bar_plot_percentages <- processed_data() %>%
         mutate(
-          label = factor(!!sym(input$country_col_select), levels = unique(!!sym(input$country_col_select))) %>% fct_rev()
+          label = factor(!!sym(input$country_col_select), levels = unique(!!syms(input$country_col_select))) %>% fct_rev()
         ) %>%
         ggplot() +
         geom_tile_interactive(
@@ -952,48 +951,122 @@ shinyApp(
   })
 
     
-    mh_yn <- glp %>% group_by(Country, I13) %>% summarize(count = n()) %>% pivot_wider(names_from = I13, values_from = count)
-    glp_indicators <- glp %>% rename(anxiety = 'C1_6', death = 'C1_4', loneliness = 'C1_1') %>%
-      mutate(anxiety_death = ifelse(anxiety == "Yes" & death == "Yes", "Yes", "No"),
-             anxiety_loneliness = ifelse(anxiety == "Yes" & loneliness == "Yes", "Yes", "No"),
-             death_loneliness = ifelse(death == "Yes" & loneliness == "Yes", "Yes", "No"),
-             all_three = ifelse(anxiety == "Yes" & death == "Yes" & loneliness == "Yes", "Yes", "No")) %>%
-      select(Country, anxiety, death, loneliness, anxiety_death, anxiety_loneliness, death_loneliness, all_three)
+   #  mh_yn <- glp %>% group_by(Country, I13) %>% summarize(count = n()) %>% pivot_wider(names_from = I13, values_from = count)
+   #  glp_indicators <- glp %>% rename(anxiety = 'C1_6', death = 'C1_4', loneliness = 'C1_1') %>%
+   #    mutate(anxiety_death = ifelse(anxiety == "Yes" & death == "Yes", "Yes", "No"),
+   #           anxiety_loneliness = ifelse(anxiety == "Yes" & loneliness == "Yes", "Yes", "No"),
+   #           death_loneliness = ifelse(death == "Yes" & loneliness == "Yes", "Yes", "No"),
+   #           all_three = ifelse(anxiety == "Yes" & death == "Yes" & loneliness == "Yes", "Yes", "No")) %>%
+   #    select(Country, anxiety, death, loneliness, anxiety_death, anxiety_loneliness, death_loneliness, all_three)
+   #  
+   #  glp_summary <- glp_indicators %>% group_by(Country) %>% summarise(across(anxiety:all_three, ~ sum(. == "Yes"), .names = "count_{col}"))
+   #  
+   # # countries <- jsonlite::fromJSON(txt ="F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/World_Countries_Generalized.json")
+   #  
+   #  output$plot_yn <- renderPlotly({
+   #    param_mhyn <- input$parameter_mhyn
+   #    plot_ly(data = mh_yn, type = "choropleth", locations = ~Country, z = ~get(param_mhyn), colorscale = "Blues", locationmode = "country names") %>%
+   #      colorbar(title = "No of answers") %>%
+   #      layout(geo = list(scope = "world"), title = paste("Mental Health Indicators -", param_mhyn))
+   #  })
+   #  
+   #  selected_column <- reactive({
+   #    if (all(c("Anxiety", "Death", "Loneliness") %in% input$conditions)) {
+   #      "count_all_three"
+   #    } else if (all(c("Anxiety", "Death") %in% input$conditions)) {
+   #      "count_anxiety_death"
+   #    } else if (all(c("Anxiety", "Loneliness") %in% input$conditions)) {
+   #      "count_anxiety_loneliness"
+   #    } else if (all(c("Death", "Loneliness") %in% input$conditions)) {
+   #      "count_death_loneliness"
+   #    } else if ("Anxiety" %in% input$conditions) {
+   #      "count_anxiety"
+   #    } else if ("Death" %in% input$conditions) {
+   #      "count_death"
+   #    } else if ("Loneliness" %in% input$conditions) {
+   #      "count_loneliness"
+   #    }
+   #  })
     
-    glp_summary <- glp_indicators %>% group_by(Country) %>% summarise(across(anxiety:all_three, ~ sum(. == "Yes"), .names = "count_{col}"))
     
-   # countries <- jsonlite::fromJSON(txt ="F:/PE & RE Electives Semester-3/MentalHealthViz/Shapefiles/World_Countries_Generalized.json")
-    
-    output$plot_yn <- renderPlotly({
-      param_mhyn <- input$parameter_mhyn
-      plot_ly(data = mh_yn, type = "choropleth", locations = ~Country, z = ~get(param_mhyn), colorscale = "Blues", locationmode = "country names") %>%
-        colorbar(title = "No of answers") %>%
-        layout(geo = list(scope = "world"), title = paste("Mental Health Indicators -", param_mhyn))
+    output$dynamic_conditions <- renderUI({
+      req(valid_columns())
+      columns <- valid_columns()
+      checkboxGroupInput("conditions", "Select conditions:",
+                         choices = columns,
+                         selected = columns[1])
     })
     
-    selected_column <- reactive({
-      if (all(c("Anxiety", "Death", "Loneliness") %in% input$conditions)) {
-        "count_all_three"
-      } else if (all(c("Anxiety", "Death") %in% input$conditions)) {
-        "count_anxiety_death"
-      } else if (all(c("Anxiety", "Loneliness") %in% input$conditions)) {
-        "count_anxiety_loneliness"
-      } else if (all(c("Death", "Loneliness") %in% input$conditions)) {
-        "count_death_loneliness"
-      } else if ("Anxiety" %in% input$conditions) {
-        "count_anxiety"
-      } else if ("Death" %in% input$conditions) {
-        "count_death"
-      } else if ("Loneliness" %in% input$conditions) {
-        "count_loneliness"
+    summary_data <- reactive({
+      req(renamed_data(), input$conditions)
+      mhplot_data <- renamed_data()
+      
+      # Dynamically create all possible combinations
+      combined_conditions <- lapply(seq_along(input$conditions), function(r) {
+        combn(input$conditions, r, simplify = FALSE)
+      }) %>% unlist(recursive = FALSE)
+      
+      # Process each combination
+      for (combo in combined_conditions) {
+        # Create column name
+        combo_name <- paste(combo, collapse = "_")
+        
+        # Check if combination exists
+        mhplot_data[[combo_name]] <- apply(mhplot_data[, combo, drop = FALSE], 1, function(row) {
+          all(row == "Yes")
+        })
       }
+      
+      # Summarize data by country
+      summary <- mhplot_data %>%
+        group_by(Country) %>%
+        summarise(across(contains("_"), ~ sum(. == TRUE), .names = "count_{col}"))
+      
+      return(summary)
     })
     
-    output$plot_mentalhealth <- renderPlotly({
-      plot_ly(data = glp_summary, type = "choropleth", geojson = countries, locations = ~Country, z = ~get(selected_column()), colorscale = "Redor", locationmode = "country names") %>%
-        colorbar(title = "No of responses") %>%
-        layout(geo = list(scope = "world"), title = "Prevealance of Mental Health conditions")
+    # Determine selected column based on user input
+    selected_column <- reactive({
+      req(input$conditions)
+      
+      # If multiple conditions, try combo column first
+      if (length(input$conditions) > 1) {
+        combo_col <- paste0("count_", paste(input$conditions, collapse = "_"))
+        if (combo_col %in% names(summary_data())) {
+          return(combo_col)
+        }
+      }
+      
+      # Fallback to individual conditions
+      paste0("count_", input$conditions)
     })
+    
+    # Render plot
+    output$plot_mentalhealth <- renderPlotly({
+      req(summary_data(), selected_column())
+      
+      plot_ly(
+        data = summary_data(),
+        type = "choropleth",
+        locations = ~Country,
+        z = ~get(selected_column()),
+        colorscale = "Redor",
+        locationmode = "country names"
+      ) %>%
+        colorbar(title = "No of responses") %>%
+        layout(
+          geo = list(scope = "world"),
+          title = "Prevalence of Selected Conditions"
+        )
+    })
+    
+    
+    
+    # output$plot_mentalhealth <- renderPlotly({
+    #   plot_ly(data = glp_summary, type = "choropleth", geojson = countries, locations = ~Country, z = ~get(selected_column()), colorscale = "Redor", locationmode = "country names") %>%
+    #     colorbar(title = "No of responses") %>%
+    #     layout(geo = list(scope = "world"), title = "Prevealance of Mental Health conditions")
+    # })
     
     
 #For population pyramid data
